@@ -1,0 +1,43 @@
+[project]
+name = "eatwhat-backend"
+version = "0.1.0"
+description = "EatWhat 后端：模块化单体，P1 骨架阶段"
+readme = "README.md"
+authors = [
+    { name = "yu xuan mo", email = "2581910881@qq.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.141.1",
+    "pydantic-settings>=2.14.2",
+    "uvicorn[standard]>=0.52.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.16.1",
+]

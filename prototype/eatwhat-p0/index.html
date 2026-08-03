@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="EatWhat P0 响应式交互原型">
+  <title>EatWhat · 响应式交互原型</title>
+  <link rel="stylesheet" href="styles.css?v=4">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="site-header" data-global-nav>
+    <div class="header-inner">
+      <button class="brand text-button" type="button" data-go="home" aria-label="返回 EatWhat 首页">
+        <span class="brand-mark" aria-hidden="true">吃</span>
+        <span>EatWhat</span>
+      </button>
+      <nav class="desktop-nav" aria-label="主导航">
+        <button class="nav-link" type="button" data-go="home">首页</button>
+        <button class="nav-link" type="button" data-go="community">大家在吃</button>
+        <button class="nav-link nav-primary" type="button" data-go="questionnaire">开始推荐</button>
+      </nav>
+      <button class="account-pill" id="account-button" type="button">登录</button>
+    </div>
+  </header>
+
+  <aside class="prototype-panel" aria-labelledby="prototype-title">
+    <details>
+      <summary id="prototype-title">原型控制台</summary>
+      <div class="prototype-controls">
+        <label class="toggle-row">
+          <input id="login-toggle" type="checkbox">
+          <span>模拟已登录</span>
+        </label>
+        <label>
+          <span>AI 响应</span>
+          <select id="ai-speed">
+            <option value="slow">慢速（展示等待反馈）</option>
+            <option value="fast">快速</option>
+            <option value="error">首次失败</option>
+          </select>
+        </label>
+        <label>
+          <span>POI 响应</span>
+          <select id="poi-state">
+            <option value="ready">正常：5 家</option>
+            <option value="empty">零结果</option>
+            <option value="error">服务错误</option>
+          </select>
+        </label>
+        <button class="button button-ghost" id="reset-prototype" type="button">重置原型</button>
+      </div>
+    </details>
+  </aside>
+
+  <div class="offline-banner" id="offline-banner" role="status" hidden>
+    当前网络不可用。你的问卷答案仍保存在本标签页。
+  </div>
+
+  <main id="main" tabindex="-1">
+    <section class="screen" data-screen="home">
+      <div class="page-shell home-shell">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">先定方向，再找附近</p>
+            <h1 tabindex="-1">别再纠结，先决定吃什么</h1>
+            <p class="lead">回答几组会根据你选择变化的问题。需要 AI 时再登录，选定食物后帮你查附近商家。</p>
+            <div class="hero-actions">
+              <button class="button button-primary button-large" type="button" data-go="questionnaire">开始推荐</button>
+              <button class="button button-secondary" type="button" data-go="community">看看大家在吃什么</button>
+            </div>
+            <p class="microcopy">预设问卷无需登录 · AI 只推荐食物，不编造商家</p>
+          </div>
+          <aside class="promise-card" aria-label="推荐流程说明">
+            <p class="step-kicker">一次决定，四个阶段</p>
+            <ol class="mini-steps">
+              <li><span>1</span>回答基础与自适应问题</li>
+              <li><span>2</span>AI 最多逐题追问 3 轮</li>
+              <li><span>3</span>从 1→3→5 个候选中决定</li>
+              <li><span>4</span>查看附近真实商家</li>
+            </ol>
+          </aside>
+        </div>
+
+        <section class="section-block" aria-labelledby="community-preview-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">明确想法可跳过推荐</p>
+              <h2 id="community-preview-title">大家都在吃什么</h2>
+            </div>
+            <button class="text-button arrow-link" type="button" data-go="community">查看全部 <span aria-hidden="true">→</span></button>
+          </div>
+          <div class="food-grid food-grid-three">
+            <button class="food-tile" type="button" data-food-direct="麻辣烫" data-source="community">
+              <span class="food-emoji" aria-hidden="true">🍲</span>
+              <strong>麻辣烫</strong>
+              <small>热乎、选择灵活</small>
+            </button>
+            <button class="food-tile" type="button" data-food-direct="汉堡" data-source="community">
+              <span class="food-emoji" aria-hidden="true">🍔</span>
+              <strong>汉堡</strong>
+              <small>快捷、满足感强</small>
+            </button>
+            <button class="food-tile" type="button" data-food-direct="小碗菜" data-source="community">
+              <span class="food-emoji" aria-hidden="true">🍚</span>
+              <strong>小碗菜</strong>
+              <small>搭配自由、稳妥</small>
+            </button>
+          </div>
+          <p class="source-note">原型阶段展示“近期热门”，不虚构群体人数。</p>
+        </section>
+
+        <section class="activity-card" aria-labelledby="activity-title">
+          <div>
+            <p class="eyebrow">今日活动</p>
+            <h2 id="activity-title">星期四，来点炸鸡？</h2>
+            <p>这是活动信息入口。确认后会搜索附近肯德基门店，不进入 AI 推荐。</p>
+          </div>
+          <button class="button button-dark" type="button" data-go="activity">查看活动</button>
+        </section>
+      </div>
+    </section>
+
+    <section class="screen" data-screen="community" hidden>
+      <div class="page-shell narrow-shell">
+        <button class="back-button" type="button" data-go="home"><span aria-hidden="true">←</span> 返回首页</button>
+        <p class="eyebrow">社区选择 · 不调用 AI</p>
+        <h1 tabindex="-1">大家都在吃什么</h1>
+        <p class="lead compact">选中明确食物后直接选择地点。真实计数只有达到隐私阈值才会出现。</p>
+        <div class="food-grid">
+          <button class="food-tile" type="button" data-food-direct="麻辣烫" data-source="community"><span class="food-emoji" aria-hidden="true">🍲</span><strong>麻辣烫</strong><small>热乎、可自由搭配</small></button>
+          <button class="food-tile" type="button" data-food-direct="汉堡" data-source="community"><span class="food-emoji" aria-hidden="true">🍔</span><strong>汉堡</strong><small>快捷、饱腹</small></button>
+          <button class="food-tile" type="button" data-food-direct="小碗菜" data-source="community"><span class="food-emoji" aria-hidden="true">🍚</span><strong>小碗菜</strong><small>菜品多、份量灵活</small></button>
+          <button class="food-tile" type="button" data-food-direct="牛肉面" data-source="community"><span class="food-emoji" aria-hidden="true">🍜</span><strong>牛肉面</strong><small>热汤主食</small></button>
+          <button class="food-tile" type="button" data-food-direct="轻食沙拉" data-source="community"><span class="food-emoji" aria-hidden="true">🥗</span><strong>轻食沙拉</strong><small>清爽、负担较轻</small></button>
+          <button class="food-tile" type="button" data-food-direct="烧烤" data-source="community"><span class="food-emoji" aria-hidden="true">🍢</span><strong>烧烤</strong><small>适合慢慢吃</small></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" data-screen="activity" hidden>
+      <div class="page-shell narrow-shell">
+        <button class="back-button" type="button" data-go="home"><span aria-hidden="true">←</span> 返回首页</button>
+        <article class="detail-card">
+          <p class="eyebrow">活动详情 · 信息以品牌官方为准</p>
+          <h1 tabindex="-1">星期四，来点炸鸡？</h1>
+          <p class="lead compact">搜索目标：肯德基门店。EatWhat 只帮你查附近门店，不保证具体门店参与活动。</p>
+          <dl class="detail-list">
+            <div><dt>活动时间</dt><dd>本周四（原型示例）</dd></div>
+            <div><dt>搜索方式</dt><dd>按品牌关键词查询附近 POI</dd></div>
+            <div><dt>AI 消耗</dt><dd>不调用 AI，不消耗推荐额度</dd></div>
+          </dl>
+          <div class="button-row">
+            <button class="button button-primary" type="button" data-food-direct="肯德基" data-source="activity">查附近肯德基门店</button>
+            <button class="button button-secondary" type="button" data-go="questionnaire">还是帮我推荐</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="screen focus-screen" data-screen="questionnaire" hidden>
+      <div class="page-shell questionnaire-shell">
+        <div class="flow-header">
+          <button class="back-button" type="button" data-go="home"><span aria-hidden="true">←</span> 退出推荐</button>
+          <span class="save-status" role="status">已自动保存在本标签页</span>
+        </div>
+        <div class="question-layout">
+          <div class="question-main">
+            <p class="eyebrow">了解你的需要</p>
+            <h1 id="question-title" tabindex="-1">先确认三个基础信息</h1>
+            <div class="coverage" aria-label="问卷信息覆盖进度">
+              <div class="coverage-copy"><span id="coverage-label">已了解 0/7 个方面</span><span>题目会根据回答变化</span></div>
+              <div class="coverage-track" aria-hidden="true"><span id="coverage-bar"></span></div>
+            </div>
+            <div id="branch-notice" class="notice notice-warning" role="status" tabindex="-1" hidden></div>
+
+            <form id="base-form" class="question-form">
+              <fieldset>
+                <legend>1. 现在想吃到什么程度？</legend>
+                <div class="choice-grid">
+                  <label class="choice-card"><input type="radio" name="appetite" value="light" required><span><strong>轻一点</strong><small>不想吃得太撑</small></span></label>
+                  <label class="choice-card"><input type="radio" name="appetite" value="normal"><span><strong>正常一餐</strong><small>刚好吃饱</small></span></label>
+                  <label class="choice-card"><input type="radio" name="appetite" value="hungry"><span><strong>很饿</strong><small>想要更强饱腹感</small></span></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend>2. 有需要避开的食物吗？</legend>
+                <div class="choice-grid choice-grid-compact">
+                  <label class="choice-card"><input type="radio" name="avoidance" value="none" required><span><strong>暂时没有</strong></span></label>
+                  <label class="choice-card"><input type="radio" name="avoidance" value="seafood"><span><strong>避开海鲜</strong></span></label>
+                  <label class="choice-card"><input type="radio" name="avoidance" value="meat"><span><strong>不吃肉</strong></span></label>
+                </div>
+                <p class="field-help">仅用于日常选择，不构成过敏或医疗安全保证。</p>
+              </fieldset>
+              <fieldset>
+                <legend>3. 今天更偏向哪种口味？</legend>
+                <div class="choice-grid choice-grid-compact">
+                  <label class="choice-card"><input type="radio" name="taste" value="light" required><span><strong>清淡</strong></span></label>
+                  <label class="choice-card"><input type="radio" name="taste" value="spicy"><span><strong>香辣</strong></span></label>
+                  <label class="choice-card"><input type="radio" name="taste" value="any"><span><strong>都可以</strong></span></label>
+                </div>
+              </fieldset>
+              <div class="form-error" id="base-error" role="alert" tabindex="-1" hidden>请先回答这一页的三个问题。</div>
+              <div class="button-row button-row-end">
+                <button class="button button-primary" type="submit">根据回答继续</button>
+              </div>
+            </form>
+
+            <form id="adaptive-form" class="question-form" hidden>
+              <fieldset id="branch-question"></fieldset>
+              <fieldset>
+                <legend>2. 这顿饭一个人大约准备花多少？</legend>
+                <div class="choice-grid choice-grid-compact">
+                  <label class="choice-card"><input type="radio" name="budget" value="under_20" required><span><strong>20 元以下</strong></span></label>
+                  <label class="choice-card"><input type="radio" name="budget" value="from_20_to_30"><span><strong>20–30 元</strong></span></label>
+                  <label class="choice-card"><input type="radio" name="budget" value="over_30"><span><strong>30 元以上</strong><small>今天想吃好一点</small></span></label>
+                </div>
+                <p class="field-help">用于选择更合适的食物方向；具体门店价格会有差异。</p>
+              </fieldset>
+              <fieldset>
+                <legend>3. 现在有没有已经想到的食物？</legend>
+                <div class="choice-grid">
+                  <label class="choice-card"><input type="radio" name="explicit" value="麻辣烫" required><span><strong>麻辣烫</strong><small>选定后直接找附近</small></span></label>
+                  <label class="choice-card"><input type="radio" name="explicit" value="牛肉面"><span><strong>牛肉面</strong><small>选定后直接找附近</small></span></label>
+                  <label class="choice-card"><input type="radio" name="explicit" value="undecided"><span><strong>还没想好</strong><small>继续让 AI 帮我判断</small></span></label>
+                </div>
+              </fieldset>
+              <div class="form-error" id="adaptive-error" role="alert" tabindex="-1" hidden>请先回答这一页的三个问题。</div>
+              <div class="button-row spread-row">
+                <button class="button button-secondary" id="edit-base" type="button">修改基础答案</button>
+                <button class="button button-primary" type="submit">完成预设问卷</button>
+              </div>
+            </form>
+          </div>
+
+          <aside class="answer-panel" aria-labelledby="answer-summary-title">
+            <h2 id="answer-summary-title">已了解的信息</h2>
+            <div id="answer-summary" class="answer-summary"><p class="muted">回答后会显示在这里。</p></div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen focus-screen" data-screen="auth" hidden>
+      <div class="page-shell narrow-shell">
+        <button class="back-button" id="auth-back" type="button"><span aria-hidden="true">←</span> 修改答案</button>
+        <article class="auth-boundary-card">
+          <div class="icon-disc" aria-hidden="true">✨</div>
+          <p class="eyebrow">预设问卷已完成</p>
+          <h1 tabindex="-1">下一步需要 AI 帮你进一步判断</h1>
+          <p class="lead compact">登录用于控制 AI 调用额度。你刚才填写的答案已保存，登录后会从这里继续。</p>
+          <div class="summary-strip" id="auth-summary"></div>
+          <div class="button-stack">
+            <button class="button button-primary" id="mock-login" type="button">模拟登录并继续</button>
+            <button class="button button-secondary" id="mock-register" type="button">模拟注册并继续</button>
+            <button class="text-button" type="button" data-go="home">暂不使用 AI，返回首页</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="screen focus-screen" data-screen="ai" hidden>
+      <div class="page-shell questionnaire-shell">
+        <div class="flow-header">
+          <button class="back-button" id="ai-edit-answers" type="button"><span aria-hidden="true">←</span> 修改预设答案</button>
+          <span class="save-status" role="status">答案已保存</span>
+        </div>
+        <div class="question-layout">
+          <div class="question-main">
+            <p class="eyebrow">AI 逐轮追问 · <span id="ai-round-label">第 1/最多 3 轮</span></p>
+            <h1 id="ai-question-title" tabindex="-1">最后更想要哪种用餐感觉？</h1>
+            <p id="ai-question-help" class="lead compact">一次只回答一个问题；信息充分时会提前结束。</p>
+
+            <form id="ai-form" class="question-form">
+              <fieldset>
+                <legend class="sr-only">选择回答</legend>
+                <div id="ai-options" class="choice-grid"></div>
+              </fieldset>
+              <div class="form-error" id="ai-error" role="alert" tabindex="-1" hidden>请选择一个回答。</div>
+              <div class="button-row button-row-end">
+                <button class="button button-primary" id="ai-submit" type="submit">提交回答</button>
+              </div>
+            </form>
+
+            <section class="ai-wait-card" id="ai-wait" aria-live="polite" aria-atomic="true" hidden>
+              <p class="saved-answer" id="saved-ai-answer"></p>
+              <div class="skeleton-lines" aria-hidden="true"><span></span><span></span><span></span></div>
+              <h2 id="ai-stage-title">正在根据你的回答准备下一题</h2>
+              <p id="ai-stage-help">请稍候。我们不会展示虚假的完成百分比。</p>
+            </section>
+
+            <section class="notice notice-error" id="ai-request-error" role="alert" tabindex="-1" hidden>
+              <h2>这次请求没有完成</h2>
+              <p>你的回答已保留。重试会使用同一个请求，不会多算一轮或重复消耗额度。</p>
+              <button class="button button-secondary" id="retry-ai" type="button">重试当前请求</button>
+            </section>
+          </div>
+          <aside class="answer-panel" aria-labelledby="ai-known-title">
+            <h2 id="ai-known-title">AI 已知信息</h2>
+            <div id="ai-known-summary" class="answer-summary"></div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen focus-screen" data-screen="results" hidden>
+      <div class="page-shell results-shell">
+        <div class="flow-header">
+          <button class="back-button" id="results-edit" type="button"><span aria-hidden="true">←</span> 修改答案</button>
+          <span class="quota-pill">本次完整推荐计入 1 次额度</span>
+        </div>
+        <p class="eyebrow">推荐完成 · 已生成 5 个候选</p>
+        <h1 tabindex="-1">先从这一个开始</h1>
+        <p class="lead compact">先看最匹配的一项；如果不合适，再逐步展开，避免一下看到太多选择。</p>
+        <p class="notice notice-info">预算是食物方向的参考，不代表附近每家店都在该价位。</p>
+        <div id="recommendation-list" class="recommendation-list" aria-live="polite"></div>
+        <div class="result-actions">
+          <button class="button button-secondary" id="more-results" type="button">更多推荐（再看 2 个）</button>
+          <p class="microcopy" id="result-count">当前显示 1/5 · 展开不会再次调用 AI</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen focus-screen" data-screen="location" hidden>
+      <div class="page-shell narrow-shell">
+        <button class="back-button" id="location-back" type="button"><span aria-hidden="true">←</span> 返回上一步</button>
+        <p class="eyebrow">位置只在查商家时使用</p>
+        <h1 tabindex="-1">为“<span data-selected-food>这道食物</span>”选择搜索地点</h1>
+        <p class="lead compact">精确坐标只用于当前搜索，不会放进网址或默认写入推荐历史。</p>
+
+        <div id="location-current" class="notice notice-info" hidden>
+          当前地点：<strong>光谷广场附近</strong>
+          <div class="inline-actions">
+            <button class="button button-primary" id="reuse-location" type="button">继续使用</button>
+            <button class="button button-ghost" id="change-location" type="button">更换地点</button>
+          </div>
+        </div>
+
+        <div id="location-methods" class="method-grid">
+          <article class="method-card">
+            <span class="method-icon" aria-hidden="true">◎</span>
+            <h2>使用当前位置</h2>
+            <p>浏览器会询问一次定位权限。</p>
+            <button class="button button-secondary" id="use-current-location" type="button">获取当前位置</button>
+          </article>
+          <article class="method-card">
+            <span class="method-icon" aria-hidden="true">⌕</span>
+            <h2>手动搜索地点</h2>
+            <label class="input-label" for="place-search">学校、商圈或区域</label>
+            <input id="place-search" type="search" placeholder="例如：武汉工程大学">
+            <button class="button button-secondary" id="search-place" type="button">搜索并使用</button>
+          </article>
+          <article class="method-card">
+            <span class="method-icon" aria-hidden="true">◇</span>
+            <h2>使用演示地点</h2>
+            <p>用光谷广场附近完成原型流程。</p>
+            <button class="button button-secondary" id="use-demo-location" type="button">使用光谷广场</button>
+          </article>
+        </div>
+
+        <section class="permission-simulator" id="permission-simulator" role="dialog" aria-modal="false" aria-labelledby="permission-title" hidden>
+          <h2 id="permission-title">模拟浏览器定位权限</h2>
+          <p>真实实现会使用浏览器权限弹窗；原型在页面内模拟两种结果。</p>
+          <div class="button-row">
+            <button class="button button-primary" id="allow-location" type="button">允许</button>
+            <button class="button button-secondary" id="deny-location" type="button">拒绝</button>
+          </div>
+        </section>
+
+        <section class="notice notice-warning" id="location-denied" role="alert" tabindex="-1" hidden>
+          <h2>无法使用当前位置</h2>
+          <p>我们不会再次弹出权限请求。请改用手动搜索或演示地点。</p>
+        </section>
+      </div>
+    </section>
+
+    <section class="screen focus-screen" data-screen="merchants" hidden>
+      <div class="page-shell results-shell">
+        <div class="flow-header">
+          <button class="back-button" type="button" data-go="location"><span aria-hidden="true">←</span> 修改地点</button>
+          <button class="text-button" type="button" data-go="home">换一种食物</button>
+        </div>
+        <p class="eyebrow">附近商家 · 地图数据</p>
+        <h1 tabindex="-1"><span data-selected-food>食物</span> · 光谷广场附近</h1>
+        <p class="lead compact">默认展示距离较近的 5 个匹配结果。“较近”不代表“最好”，营业状态仅在数据可靠时显示。</p>
+        <p class="notice notice-info">这些商家按品类/关键词和距离匹配。当前没有可靠门店价格数据，因此不按预算筛选；实际消费请以门店菜单为准。</p>
+
+        <div id="poi-loading" class="merchant-skeleton" aria-live="polite">
+          <div class="skeleton-card"></div><div class="skeleton-card"></div>
+          <p>正在查询附近商家…</p>
+        </div>
+        <div id="merchant-list" class="merchant-list" hidden></div>
+        <section id="poi-empty" class="empty-state" tabindex="-1" hidden>
+          <div class="icon-disc" aria-hidden="true">⌕</div>
+          <h2>附近暂时没有匹配结果</h2>
+          <p>你的食物选择“<span data-selected-food></span>”仍然保留。</p>
+          <div class="button-row centered-row">
+            <button class="button button-secondary" type="button" data-go="location">更换地点</button>
+            <button class="button button-ghost" id="expand-range" type="button">扩大搜索范围</button>
+          </div>
+        </section>
+        <section id="poi-error" class="empty-state" role="alert" tabindex="-1" hidden>
+          <div class="icon-disc error-disc" aria-hidden="true">!</div>
+          <h2>附近商家暂时无法加载</h2>
+          <p>食物和地点都已保留。你可以重试或切换为演示结果。</p>
+          <div class="button-row centered-row">
+            <button class="button button-primary" id="retry-poi" type="button">重试</button>
+            <button class="button button-secondary" id="demo-poi" type="button">使用演示商家</button>
+          </div>
+        </section>
+
+        <p class="source-note" id="poi-source" hidden>商家名称、地址和距离来自地图服务；原型当前使用演示数据。未提供价格的数据不会由 AI 补全。</p>
+
+        <section class="wrap-up" id="wrap-up" aria-labelledby="wrap-up-title" hidden>
+          <div class="section-heading">
+            <div><p class="eyebrow">主任务已经完成</p><h2 id="wrap-up-title">愿意帮助我们改进吗？</h2></div>
+            <button class="text-button" id="close-wrap-up" type="button">全部跳过</button>
+          </div>
+          <p>以下三项相互独立，全部可跳过，不影响刚才的结果。</p>
+          <div class="wrap-grid">
+            <details class="wrap-card">
+              <summary>快速评价</summary>
+              <p>这次推荐有帮助吗？</p>
+              <div class="button-row"><button class="button button-secondary feedback-button" type="button">有帮助</button><button class="button button-ghost feedback-button" type="button">没帮助</button></div>
+            </details>
+            <details class="wrap-card">
+              <summary>3 个简短问题</summary>
+              <label class="input-label" for="survey-select">推荐匹配程度</label>
+              <select id="survey-select"><option>很匹配</option><option>一般</option><option>不匹配</option></select>
+              <button class="button button-secondary wrap-submit" type="button">提交问卷</button>
+            </details>
+            <details class="wrap-card">
+              <summary>匿名分享食物选择</summary>
+              <p><strong>将分享：</strong>午餐、城市级区域、最终食物。</p>
+              <p><strong>不会分享：</strong>账户、会话、问卷答案、AI 对话、精确位置、具体商家。</p>
+              <button class="button button-secondary wrap-submit" type="button">确认匿名分享</button>
+            </details>
+          </div>
+          <p class="notice notice-success" id="wrap-message" role="status" hidden></p>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <nav class="mobile-nav" aria-label="移动端主导航" data-global-nav>
+    <button type="button" data-go="home"><span aria-hidden="true">⌂</span>首页</button>
+    <button type="button" data-go="community"><span aria-hidden="true">◉</span>社区</button>
+    <button type="button" data-go="questionnaire"><span aria-hidden="true">✦</span>推荐</button>
+    <button type="button" id="mobile-account"><span aria-hidden="true">○</span>我的</button>
+  </nav>
+
+  <script src="app.js?v=3"></script>
+</body>
+</html>
