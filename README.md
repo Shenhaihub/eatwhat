@@ -38,7 +38,34 @@ project0717/
 
 ## 本地运行
 
-> 待前后端骨架完成后补充可复现的运行步骤。
+前置：Node.js 24 LTS、Python 3.13、[uv](https://docs.astral.sh/uv/)。无需任何第三方 Key 即可启动（默认 Mock，尚未接入外部服务）。
+
+后端：
+
+```powershell
+cd backend
+uv sync          # 首次安装依赖并生成/同步 .venv 与 uv.lock
+uv run uvicorn app.main:app --reload
+# 验证：http://127.0.0.1:8000/health/live -> {"status":"ok"}
+```
+
+前端：
+
+```powershell
+cd frontend
+npm install
+npm run dev
+# 打开 http://localhost:5173/
+```
+
+运行测试与检查：
+
+```powershell
+cd backend && uv run pytest && uv run ruff check . && uv run mypy app
+cd frontend && npm run build
+```
+
+> 当前仅提供健康检查与默认 Vite 页面；业务功能按实施计划 P1–P8 逐步实现。
 
 ## 文档
 
