@@ -46,8 +46,13 @@ project0717/
 cd backend
 uv sync          # 首次安装依赖并生成/同步 .venv 与 uv.lock
 uv run uvicorn app.main:app --reload
-# 验证：http://127.0.0.1:8000/health/live -> {"status":"ok"}
+# 验证：
+#   /health/live  -> {"status":"ok"}
+#   /health/ready -> {"status":"ready","config":"ok","database":"not_configured"}
+#   /nope         -> 404 统一错误体（error.code/request_id），并带 X-Request-ID 响应头
 ```
+
+后端壳已包含：配置分层（pydantic-settings）、统一错误响应、请求 ID、日志脱敏；`/health/ready` 在未配置数据库时返回 `database:"not_configured"` 而非 503。
 
 前端：
 
