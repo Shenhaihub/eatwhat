@@ -2,7 +2,7 @@
 
 > 用途：为长期 Codex 协作提供高精度、可恢复的项目上下文。  
 > 最后更新：2026-08-04  
-> 状态：P1 工程骨架全部完成；P2-01 定义食物字典与输入 schema [>] 进行中（14/50）。  
+> 状态：P2 混合自适应问卷与规则候选垂直切片进行中；P2-01 食物字典与 schema 完成（15/50），P2-02 确定性规则引擎 [>] 进行中。  
 > 注意：本文件记录”事实、已确认决策、建议和待定项”，不能把 Codex 建议误写成用户已经确认的结论。
 
 ## 1. 恢复上下文时先读什么
@@ -33,8 +33,13 @@
 - 项目名：EatWhat。
 - 形态：响应式 Web 优先，兼容移动端和桌面端。
 - 当前目录：`D:\A622\项目\AgentWork\project0717`（2026-08-03 复制后的工作区；原路径 `D:\A622\项目\project0717` 仍存在，两处内容一致）。
-- 当前仓库事实：已有 `docs/`、`prototype/eatwhat-p0/` 可点击原型，以及 `frontend/`（React/Vite/TS 前端壳）和 `backend/`（FastAPI 后端壳）。截至 2026-08-04 已在本工作区 `git init`（main 分支），现有 9 个提交；GitHub 远端 `https://github.com/Shenhaihub/eatwhat`（private）已建立并同步；origin/main 与本地完全一致；CI 最小门禁实跑全绿。
-- 当前阶段：P0（产品/原型/技术文档收敛）已完成；P1（工程骨架）已完成（14/50）；P2 业务垂直切片（混合自适应问卷与规则候选）进行中，当前主任务 P2-01 定义食物字典与输入 schema。尚未接入数据库、认证、AI、地图与业务功能；不能称为"产品功能已开发"。
+- 当前仓库事实：已有 `docs/`、`prototype/eatwhat-p0/` 可点击原型，以及 `frontend/`（React/Vite/TS 前端壳）和 `backend/`（FastAPI 后端壳）。截至 2026-08-04 已在本工作区 `git init`（main 分支），现有 11 个提交；GitHub 远端 `https://github.com/Shenhaihub/eatwhat`（private）已建立并同步；origin/main 与本地完全一致；CI 连续 3 次实跑全绿。P2-01 交付物已入库：
+  - `backend/app/schemas/enums.py` + `food.py`：枚举/问卷答案/食物字典/推荐候选/校验器/入口意图；
+  - `backend/app/data/food_dictionary_v1.0.json`：15 条启用字典；
+  - `backend/app/repositories/food_dictionary.py`：内存只读仓库（加载即校验，加载失败在启动时暴露）；
+  - `backend/tests/test_food_dictionary.py`：37 用例（新增 22）；
+  - `frontend/src/services/api/types/`：enums/food/index 三件套，1:1 后端。
+- 当前阶段：P0（产品/原型/技术文档收敛）已完成；P1（工程骨架）已完成（14/50）；P2 混合自适应问卷与规则候选垂直切片（P2-01 完成 15/50，P2-02 规则引擎进行中）。尚未接入规则引擎、问卷状态机、数据库、认证、AI、地图与业务功能；不能称为"产品功能已开发"。
 - 用户背景：Python 有基础，但整体仍是全栈初学者；主要使用 Windows，希望依赖 Codex 逐步完成第一个完整项目。
 - 项目双重目标：做出真实可用的产品，同时形成结构完整、可以展示工程能力的 GitHub 作品。
 
@@ -327,9 +332,14 @@ feedback 等数据若同时有 `user_id` 和 `session_id`，必须由服务端�
 
 ## 14. 当前下一步
 
-当前唯一主任务是计划中的 **P2-01**：定义食物字典与输入 schema。对照 22 收敛清单 G-01~G-16，特别是 G-10 预算只作软偏好、G-12 推荐必须随答案差异化且理由可追溯、G-07 source_type 服务端派生、G-08 规则回退必须非空。
+当前唯一主任务是计划中的 **P2-02**：实现确定性规则引擎。核心验收点已在计划 §8 明确：
+- 输入 `QuestionnaireAnswers` + 字典版本 → 输出正好 5 条 `RecommendationItem`（priority 1–5）
+- 相同输入稳定输出；任何合法输入至少 5 条不空（G-08）
+- 至少验证 4 组不同答案组合产生**不同的首候选**或**不同排序**（G-12 防固定首候选"小碗菜"复现）
+- 每条 `RecommendationReason.matched_signals` ≥ 1，且可追溯到具体答案或标签（G-12 理由可追溯）
+- `source_type` 由服务端派生（不允许客户端传），`generation_mode=rule`（首版规则，P5 再接 AI）
 
-P1-01~P1-04 已完成：仓库与根配置 `8248b5f/846bee1`、frontend 完整前端壳 `d1dfdba`、backend FastAPI 壳 `ec46112`、CI 工作流+GitHub private 远端+Actions 全绿 `8c2feb4`。P1 工程骨架全部关闭（14/50）。CI 已成为硬门禁：GitHub Actions Run #30872862500（24s）frontend 20s ✓、backend 20s ✓。
+P1-01~P2-01 已完成（15/50）；提交链：`8248b5f → 846bee1 → d1dfdba → ec46112 → 8c2feb4 → 6d6cd6f → c36f1f0`。CI 已成为硬门禁，连续 3 次推送均全绿（24/25/36s）。
 
 工程实现以 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 为契约基准。推迟到工程后的补测项（不伪造完成）：完整 3–5 人真人理解数据、"是否减少犹豫"证据。
 
@@ -504,3 +514,22 @@ P1-01~P1-04 已完成：仓库与根配置 `8248b5f/846bee1`、frontend 完整�
 - 注意：Runner 控制台有 Node 20 弃用 blog 链接，来自 runner 内部依赖而非我们的 job（我们指定 `node-version: 24`），不受影响。
 - P1 工程骨架全部关闭（P1-01~P1-04），14/50；当前主任务切换为 P2-01 定义食物字典与输入 schema。
 - 下一次继续：对照 22 收敛清单 G-01~G-16，特别是 G-09（分享字段上限）、G-10（预算软偏好，不保证商家符合，价格仅作为食物方向提示）、G-11（医学忌口与普通偏好字段分层，不把"避开"承诺写成医学安全承诺）、G-12（推荐必须随答案差异化且理由可追溯，禁止固定首候选）、G-15（社区/活动首版必做）。
+
+### 2026-08-04 — MEM-023（P2-01 完成 ✓ 15/50，食物字典 v1.0 + schema/类型 + 37 用例，CI 3 连绿）
+
+- 用户确认"进入 P2"，直接推进 P2-01。
+- 精读真源契约：00 名词表七维、16 预算契约三档、22 收敛清单 G-07~G-16、01 PRD；核对原型实际出现的食物（推荐 5 + 社区 6 + 活动 1 ≥ 11 条）。
+- 后端 4 个新增文件：
+  - `app/schemas/enums.py`：BudgetTier/SourceType/GenerationMode/MealPeriod/Appetite/Avoidance/Taste/ExplicitPreference/MedicalAllergen/CuisineGroup/MealTimeTag/SatietyTag/BudgetFitStatus；MealTimeTag 新增 `tea_time`（区分于问卷答案 MealPeriod.afternoon_tea）。
+  - `app/schemas/food.py`：QuestionnaireAnswers/FoodDictionaryItem/RecommendationItem/RecommendationReason/ValidationHelpers 全部 `extra=forbid`；入口意图 `ENTRY_POINT_INTENT_VALUES` 四值（客户端只传这个，不传 source_type）。
+  - `app/data/food_dictionary_v1.0.json`：15 条启用字典，覆盖 11 条原型食物+4 条差异化素材；无 budget_min/max 数字区间（G-11 预算三件套）；医学过敏项附免责提醒（禁止绝对化承诺词）。
+  - `app/repositories/food_dictionary.py`：FoodDictionaryRepository 内存只读仓库，加载时一次性 Pydantic + 三道 ValidationHelpers（代码唯一/医学边界/启用池≥5），启动时暴露坏掉的数据；对外 7 个查询签名供规则引擎复用。
+- `tests/test_food_dictionary.py`：37 用例全绿（新增 22，继承 P1 15）。覆盖枚举边界、真实字典加载、原型食物存在、菜系族/预算档素材多样化、无 budget_min/max 数字、加载器查询、四道负例、推荐 schema 三约束。
+- 前端新增 `frontend/src/services/api/types/` 三件套：enums/food/index，1:1 后端；入口意图常量与后端同构；业务代码统一从 `services/api/types/index.ts` 导出，禁止直读子文件。
+- 提交 `c36f1f0`；push → **GitHub Actions Run 3 全绿（36s）**，第三次连续通过 CI，门禁稳定性确认。
+- 注意事项（对后续 P2-02 的输入约束）：
+  - `MealTimeTag.tea_time` ≠ `MealPeriod.afternoon_tea`；前者是食物自然场景标签，后者是用户问卷答案。
+  - 字典首版 15 条不是终版，以后增量补；保持 `dictionary_version` 字段，不要直接改现有条目的 food_code。
+  - G-12 的真正实现在 P2-02（4 组不同答案组合产生不同首候选/排序）；P2-01 只提供差异化素材。
+  - `source_type` 必须服务端派生；如果 API 路由收到客户端传的 source_type，必须报错。
+- 下一次继续：P2-02 确定性规则引擎，按计划 §8 的 5 条核心验收点交付。
