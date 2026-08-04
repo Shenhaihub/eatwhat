@@ -2,10 +2,10 @@
 
 > 这是项目后续执行的唯一实时计划清单。  
 > 最后更新：2026-08-03  
-> 当前阶段：P0 产品与原型收敛完成；进入 P1 工程骨架  
-> 当前任务：P0-06/P0-07 已完成；下一步 P1-01 初始化仓库结构与版本约束  
-> 清单进度：**10/50 已完成，0 项进行中，40 项待开始**  
-> 工程状态：已创建不依赖框架的 P0 可点击原型；技术文档已按 22 号收敛清单勘误；尚未初始化正式前端、后端、数据库迁移或产品自动化测试；仓库暂无 Git 版本历史（两处 `.git` 均为空，P1-01 时需 `git init`）
+> 当前阶段：P1 工程骨架  
+> 当前任务：P1-02 已完成（前端壳：路由/主题/响应式/错误边界/API client）；当前进行 P1-03 建立 FastAPI 后端壳  
+> 清单进度：**12/50 已完成，1 项进行中（P1-03），37 项待开始**  
+> 工程状态：已 `git init`（main 分支，4 个提交）；backend 为 FastAPI 健康检查骨架；frontend 为完整前端壳（路由/主题/错误边界/API client，build/lint/test 全绿，audit 0 漏洞）；尚未接入数据库、认证、AI、地图与业务功能
 
 ## 1. 使用规则
 
@@ -147,18 +147,23 @@
 
 目标：建立最小可运行、可测试、可持续扩展的前后端工程，不提前接入业务复杂度。
 
-- [ ] **P1-01 初始化仓库结构与版本约束**
+- [x] **P1-01 初始化仓库结构与版本约束（2026-08-03 完成）**
   - 为什么：确保开发环境和 CI 使用同一 Node/Python/包管理器基线。
   - 预期成果：`frontend/`、`backend/`、根 README、版本文件、锁文件和 `.env.example`。
-  - 后续影响：所有功能在统一目录和命令下开发。
-  - 验收：全新环境按 README 可启动前后端；密钥不进入仓库。
+  - 实际交付：`git init`（main 分支）+ 根配置（`.gitignore/.editorconfig/.env.example/README`）；`backend/` 采用 `app/` 扁平结构（uv 工程，非包模式），FastAPI 健康检查 + pytest/ruff/mypy + `uv.lock`；`frontend/` Vite React TS 骨架 + `package-lock.json`。
+  - 验证：后端 `uv run pytest` 1 通过、`ruff check` 通过、`mypy app` 通过、`/health/live` 200；前端 `npm run build` 通过、dev 服务器 200；README 含可复现启动步骤；`node_modules/.venv/dist` 已忽略、无 `.env` 入库。
+  - 提交：`8248b5f`（初始化骨架）、`846bee1`（README 运行步骤）。
+  - 后续影响：后续功能在统一目录与命令下开发；`uv` 已安装（0.12.1）到用户目录。
 
-- [ ] **P1-02 建立 React/Vite 前端壳**
+- [x] **P1-02 建立 React/Vite 前端壳（2026-08-03 完成）**
   - 依赖：P1-01。
   - 预期成果：路由、主题 token、响应式布局、错误边界、API client 骨架。
-  - 验收：桌面与 320px 页面均可访问；格式化、类型检查和单测命令可运行。
+  - 实际交付：react-router 8.3.0 路由（11 条路由 + 404，占位页按 IA）；设计令牌 tokens.css + 全局样式（320px 响应式、focus-visible、reduced-motion、跳过链接）；AppShell/Header/MobileNav 布局壳；顶层 ErrorBoundary；API client 骨架（统一 JSON/错误解析）；Vitest + Testing Library + Prettier 脚本。
+  - 验证：`npm run build`（tsc+vite）通过、`npm run lint`（oxlint）通过、`npm test` 3 文件 8 用例通过、`npm run format:check` 通过；dev 服务器 `/` 与 `/recommend` 均 200（SPA fallback）。
+  - 依赖安全：`react-router` 锁定 8.3.0 以修复 audit 高危（CSR SPA 无需 react-router-dom 薄壳），`npm audit` 0 漏洞。
+  - 提交：`d1dfdba`。
 
-- [ ] **P1-03 建立 FastAPI 后端壳**
+- [>] **P1-03 建立 FastAPI 后端壳**
   - 依赖：P1-01。
   - 预期成果：配置分层、健康检查、结构化错误、请求 ID、日志脱敏和测试夹具。
   - 验收：健康检查与示例错误契约有自动化测试；日志不出现 secrets 或精确坐标。
@@ -523,10 +528,29 @@
 - 验证：逐文档勘误表与 05–13 实际内容核对；9 份文档头注均已加入；工程契约与 PRD v1.2/名词表逐条一致。
 - 对后续的影响：P1 起工程实现以 G-01~G-16 为契约；后续产品参数修订须先更新权威文档再同步 22 号清单。
 
+### 2026-08-03 — PLAN-018（P1-01 完成，工程骨架建立）
+
+- 状态：P1-01 完成（11/50），当前进行项切换为 P1-02。
+- 用户决定：同意 `git init` 建立版本历史；明确工作区可写边界仅 `D:\A622\项目\AgentWork\project0717`，其余路径只读。
+- 工具链：Node 24.14 / npm 11.9 / Python 3.13.7 / git 2.53 均具备；安装 uv 0.12.1（官方独立安装器，位于用户目录，未污染 conda base）。
+- 成果：`git init`（main）+ 根配置（.gitignore/.editorconfig/.env.example/README）；backend 为 `app/` 扁平结构 FastAPI 骨架（非包模式），`/health/live` + pytest/ruff/mypy + uv.lock；frontend 为 Vite React TS 骨架 + package-lock.json。
+- 验证：后端 pytest 1 通过、ruff 通过、mypy 通过、health 200；前端 build 通过、dev 200；README 可复现启动；node_modules/.venv/dist 已忽略、无 .env 入库。
+- 提交：`8248b5f` 初始化骨架、`846bee1` README 运行步骤。
+- 对后续的影响：P1-02 开始建立前端壳（路由/主题/响应式/错误边界/API client）；backend 壳完善（配置分层/结构化错误/请求 ID/日志脱敏）在 P1-03。
+
+### 2026-08-03 — PLAN-019（P1-02 完成，前端壳就绪）
+
+- 状态：P1-02 完成（12/50），当前进行项切换为 P1-03。
+- 做了什么：建立 React/Vite 前端壳。路由（react-router 8.3.0）+ 11 个占位页；设计令牌与全局样式（320px 响应式、focus-visible、reduced-motion、跳过链接、按钮）；AppShell/Header/MobileNav 布局；顶层 ErrorBoundary；API client 骨架。
+- 依赖安全：`react-router` 7.18.2/7.11.0 均命中 audit 通告，锁定 `react-router@8.3.0`（修复版）后 `npm audit` 0 漏洞；纯 CSR SPA 无需 react-router-dom 薄壳。
+- 验证：build/lint/test（3 文件 8 用例）/format:check 全绿；dev 服务器根路径与 /recommend 均 200。
+- 提交：`d1dfdba`。
+- 对后续的影响：P1-03 完善后端壳（配置分层、结构化错误、请求 ID、日志脱敏、测试夹具）。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. 当前从 P1-01 继续：初始化仓库结构与版本约束（frontend/、backend/、根 README、版本文件、锁文件、`.env.example`），并先 `git init` 建立版本历史（当前 `.git` 为空）。
-4. P0-06 推迟的真人理解数据、P0-06 完成后进入工程的流程风险，均作为工程后复测项，不伪造完成。
+3. 当前从 P1-03 继续：完善 FastAPI 后端壳（配置分层、结构化错误、请求 ID、日志脱敏、测试夹具），随后 P1-04 CI 最小门禁。
+4. P0-06 推迟的真人理解数据、工程后流程风险，均作为工程后复测项，不伪造完成。
 5. 每次开始实质工程步骤前，对照 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 校验实现口径。
