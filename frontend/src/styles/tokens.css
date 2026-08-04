@@ -1,0 +1,50 @@
+/*
+ * EatWhat 设计令牌（Design Tokens）。
+ * P0 原型采用暖色、低干扰、任务优先的方向；品牌视觉尚未冻结，
+ * 这里只定义工程级可复用变量，避免散落魔法值。
+ */
+:root {
+  /* 颜色：暖色、低干扰 */
+  --color-bg: #faf7f2;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1ece4;
+  --color-text: #2b2620;
+  --color-text-muted: #6b6257;
+  --color-primary: #d97706;
+  --color-primary-hover: #b45309;
+  --color-primary-soft: #fde9d0;
+  --color-border: #e5dccf;
+  --color-error: #b91c1c;
+  --color-focus: #2563eb;
+
+  /* 间距 */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+
+  /* 圆角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* 字体 */
+  --font-sans:
+    system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+
+  /* 布局 */
+  --page-max-width: 1120px;
+  --page-padding: 16px;
+  --header-height: 56px;
+  --mobile-nav-height: 56px;
+
+  /* 层级 */
+  --z-header: 100;
+  --z-mobile-nav: 100;
+}
+
+/* 响应式断点提示（移动优先） */
+/* 480–767 宽手机/小平板单列；768–1023 平板；>=1024 桌面 */
