@@ -1,0 +1,70 @@
+name: CI
+
+# P1-04 CI 最小门禁：前端 lint/typecheck/test/build + 后端 lint(ruff)/typecheck(mypy)/test(pytest)
+# 命令与本地完全一致；触发需 GitHub 远端（当前无远端，见 EatWhat_实施计划与状态.md P1-04）。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# 同一分支的新运行取消进行中的旧运行，避免 PR 上的重复排队。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (lint / typecheck / test / build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      - run: npm test
+
+      - run: npm run build
+
+  backend:
+    name: Backend (ruff / mypy / pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-path: backend/uv.lock
+
+      # --frozen：CI 必须使用已提交的 uv.lock，不自动更新锁文件。
+      - run: uv sync --frozen
+
+      - run: uv run ruff check .
+
+      - run: uv run mypy app
+
+      - run: uv run pytest -q

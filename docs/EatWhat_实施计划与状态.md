@@ -1,11 +1,11 @@
 # EatWhat 实施计划与状态
 
 > 这是项目后续执行的唯一实时计划清单。  
-> 最后更新：2026-08-03  
+> 最后更新：2026-08-04  
 > 当前阶段：P1 工程骨架  
-> 当前任务：P1-03 已完成（后端壳：配置/错误/请求ID/日志脱敏）；当前进行 P1-04 建立 CI 最小门禁  
+> 当前任务：P1-04 进行中——CI 工作流 `.github/workflows/ci.yml` 已编写并通过本地校验；待创建 GitHub 远端并推送以实际触发  
 > 清单进度：**13/50 已完成，1 项进行中（P1-04），36 项待开始**  
-> 工程状态：已 `git init`（main 分支，5 个提交）；frontend 完整前端壳、backend FastAPI 壳（pytest 15/ruff/mypy 全绿）；尚未接入数据库、认证、AI、地图与业务功能；未建 GitHub Actions
+> 工程状态：已 `git init`（main 分支，8 个提交，无远端）；frontend 完整前端壳、backend FastAPI 壳（pytest 15/ruff/mypy 全绿）；CI 工作流已编写（前端 lint/typecheck/test/build + 后端 ruff/mypy/pytest），本地命令全绿，待推送远端实际触发；尚未接入数据库、认证、AI、地图与业务功能
 
 ## 1. 使用规则
 
@@ -174,6 +174,10 @@
   - 依赖：P1-02、P1-03。
   - 预期成果：前端 lint/typecheck/test/build，后端 lint/typecheck/test。
   - 后续影响：从第一条业务切片开始阻止基础回归，而不是项目最后补测试。
+  - 当前进度：
+    - [x] 编写 `.github/workflows/ci.yml`：frontend/backend 两个并行 job，命令与本地一致——前端 `npm ci` + `lint`/`typecheck`/`test`/`build`，后端 `uv sync --frozen` + `ruff check .`/`mypy app`/`pytest -q`；Node 24、Python 3.13、uv 缓存。
+    - [x] YAML 语法校验通过（2 job、各 7 step、触发器 push/PR to main）；本地复跑 frontend lint/typecheck/test(8)/build 与 backend ruff/mypy/pytest(15) 全绿。
+    - [!] 实际触发需创建 GitHub 远端并推送（当前 `git remote` 为空），待用户决定仓库名与可见性；不伪造为已完成。
 
 ### P2 混合自适应问卷与规则候选核心垂直切片
 
@@ -558,10 +562,23 @@
 - 提交：`ec46112`。
 - 对后续的影响：P1-04 建立 GitHub Actions CI（前端 lint/type/test/build + 后端 lint/type/test）；P2 起业务垂直切片在统一壳上开发。
 
+### 2026-08-04 — PLAN-021（P1-04 进行中：CI 工作流编写与本地验证）
+
+- 状态：P1-04 进行中。CI 工作流交付物已编写并通过本地校验；实际 GitHub 触发待创建远端（待用户决定）。
+- 做了什么：
+  1. 按强制恢复顺序只读通读 23 交接提示词、项目记忆、实施计划（D-001~D-011、最新执行日志、§8）、00 名词表、16 预算契约、22 收敛清单 G-01~G-16；P0 收尾记录（15/17~21）以执行日志摘要为准。
+  2. 核对真实工程状态：`git status` 干净、`git log` 实际 8 个提交（无远端）；frontend lint/typecheck/test(3 文件 8 用例)/build 全绿；backend ruff/mypy strict(11 文件)/pytest(15) 全绿（仅 1 个 Starlette httpx 弃用警告，非阻塞）。
+  3. 编写 `.github/workflows/ci.yml`：`frontend`/`backend` 两个并行 job，触发于 push/PR to main，`concurrency` 取消旧运行；命令与本地一致——前端 `npm ci`→`lint`→`typecheck`→`test`→`build`，后端 `uv sync --frozen`→`ruff check .`→`mypy app`→`pytest -q`；Node 24 / Python 3.13 / uv 缓存。
+  4. YAML 语法校验通过（2 job、各 7 step、触发器正确）。
+- 发现的文档漂移（已修正）：实施计划顶部原写"5 个提交"，实际 8 个（含两份交接文档提交 684dcc0/e35cde0）；已更新为 8。
+- 验证结果：CI 命令与本地全绿命令逐条一致；YAML 可解析；未在 GitHub 实际运行（无远端）。
+- 阻塞：CI 要真正触发需创建 GitHub 远端并推送，需用户决定仓库名/可见性；此为外部依赖，不伪造为已完成。
+- 对后续的影响：用户确认远端后，推送即可验证 CI 实际运行；之后进入 P2 业务垂直切片。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. 当前从 P1-04 继续：建立 GitHub Actions CI 最小门禁（前端 lint/typecheck/test/build、后端 lint/typecheck/test），随后进入 P2 业务垂直切片。
+3. P1-04 CI 工作流 `.github/workflows/ci.yml` 已编写并通过本地校验；待用户决定是否创建 GitHub 远端并推送以实际触发 CI。远端确认并推送验证通过后，P1-04 关闭（14/50），进入 P2 业务垂直切片（P2-01 食物字典与输入 schema）。
 4. P0-06 推迟的真人理解数据、工程后流程风险，均作为工程后复测项，不伪造完成。
 5. 每次开始实质工程步骤前，对照 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 校验实现口径。
