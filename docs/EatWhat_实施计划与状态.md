@@ -3,9 +3,9 @@
 > 这是项目后续执行的唯一实时计划清单。  
 > 最后更新：2026-08-03  
 > 当前阶段：P1 工程骨架  
-> 当前任务：P1-02 已完成（前端壳：路由/主题/响应式/错误边界/API client）；当前进行 P1-03 建立 FastAPI 后端壳  
-> 清单进度：**12/50 已完成，1 项进行中（P1-03），37 项待开始**  
-> 工程状态：已 `git init`（main 分支，4 个提交）；backend 为 FastAPI 健康检查骨架；frontend 为完整前端壳（路由/主题/错误边界/API client，build/lint/test 全绿，audit 0 漏洞）；尚未接入数据库、认证、AI、地图与业务功能
+> 当前任务：P1-03 已完成（后端壳：配置/错误/请求ID/日志脱敏）；当前进行 P1-04 建立 CI 最小门禁  
+> 清单进度：**13/50 已完成，1 项进行中（P1-04），36 项待开始**  
+> 工程状态：已 `git init`（main 分支，5 个提交）；frontend 完整前端壳、backend FastAPI 壳（pytest 15/ruff/mypy 全绿）；尚未接入数据库、认证、AI、地图与业务功能；未建 GitHub Actions
 
 ## 1. 使用规则
 
@@ -163,12 +163,14 @@
   - 依赖安全：`react-router` 锁定 8.3.0 以修复 audit 高危（CSR SPA 无需 react-router-dom 薄壳），`npm audit` 0 漏洞。
   - 提交：`d1dfdba`。
 
-- [>] **P1-03 建立 FastAPI 后端壳**
+- [x] **P1-03 建立 FastAPI 后端壳（2026-08-03 完成）**
   - 依赖：P1-01。
   - 预期成果：配置分层、健康检查、结构化错误、请求 ID、日志脱敏和测试夹具。
-  - 验收：健康检查与示例错误契约有自动化测试；日志不出现 secrets 或精确坐标。
+  - 实际交付：`app/core/config.py`（pydantic-settings，env 分层校验、secret_values 供脱敏）；`app/core/exceptions.py`（AppError + 4 个异常 handler，对齐 07 §4.2 错误契约）；`app/core/middleware.py`（X-Request-ID 注入/回传 + 访问日志）；`app/core/logging.py`（RedactFilter 脱敏 secret/邮箱/坐标/Bearer，挂 app logger）；`app/api/system.py`（/health/live、/health/ready）；`app/main.py`（create_app 工厂 + CORS + lifespan 占位）；`tests/` 4 个测试文件 15 用例。
+  - 验证：pytest 15 通过、ruff 通过、mypy strict 通过；uvicorn 冒烟 `/health/live` 200、`/health/ready` 返回 `database:"not_configured"`、`/nope` 404 统一错误体 + X-Request-ID 头、自定义 request-id 回显。
+  - 提交：`ec46112`。
 
-- [ ] **P1-04 建立 CI 最小门禁**
+- [>] **P1-04 建立 CI 最小门禁**
   - 依赖：P1-02、P1-03。
   - 预期成果：前端 lint/typecheck/test/build，后端 lint/typecheck/test。
   - 后续影响：从第一条业务切片开始阻止基础回归，而不是项目最后补测试。
@@ -547,10 +549,19 @@
 - 提交：`d1dfdba`。
 - 对后续的影响：P1-03 完善后端壳（配置分层、结构化错误、请求 ID、日志脱敏、测试夹具）。
 
+### 2026-08-03 — PLAN-020（P1-03 完成，后端壳就绪）
+
+- 状态：P1-03 完成（13/50），当前进行项切换为 P1-04（CI 最小门禁）。
+- 做了什么：建立 FastAPI 后端壳。`core/config.py`（pydantic-settings 配置分层 + secret_values）；`core/exceptions.py`（统一错误契约，AppError + RequestValidationError/HTTPException/Exception 四个 handler）；`core/middleware.py`（X-Request-ID + 访问日志）；`core/logging.py`（RedactFilter 脱敏，挂 app logger）；`api/system.py`（/health/live、/health/ready）；`main.py` create_app 工厂装配。
+- 关键坑：Starlette 的 `ServerErrorMiddleware` 发送 500 后会重抛异常，测试 500 契约须用 `TestClient(raise_server_exceptions=False)`；`Exception` handler 由 Starlette 路由到最外层 ServerErrorMiddleware。
+- 验证：pytest 15 通过、ruff 通过、mypy strict 通过；uvicorn 冒烟 health/404/request-id 均符合契约；日志脱敏单测覆盖 secret/邮箱/坐标/Bearer。
+- 提交：`ec46112`。
+- 对后续的影响：P1-04 建立 GitHub Actions CI（前端 lint/type/test/build + 后端 lint/type/test）；P2 起业务垂直切片在统一壳上开发。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. 当前从 P1-03 继续：完善 FastAPI 后端壳（配置分层、结构化错误、请求 ID、日志脱敏、测试夹具），随后 P1-04 CI 最小门禁。
+3. 当前从 P1-04 继续：建立 GitHub Actions CI 最小门禁（前端 lint/typecheck/test/build、后端 lint/typecheck/test），随后进入 P2 业务垂直切片。
 4. P0-06 推迟的真人理解数据、工程后流程风险，均作为工程后复测项，不伪造完成。
 5. 每次开始实质工程步骤前，对照 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 校验实现口径。

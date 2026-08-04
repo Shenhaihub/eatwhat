@@ -2,7 +2,7 @@
 
 > 用途：为长期 Codex 协作提供高精度、可恢复的项目上下文。  
 > 最后更新：2026-08-03  
-> 状态：P1 工程骨架进行中（P1-01 仓库/骨架、P1-02 前端壳已完成；当前 P1-03 后端壳）。  
+> 状态：P1 工程骨架进行中（P1-01~P1-03 已完成；当前 P1-04 CI 最小门禁）。  
 > 注意：本文件记录”事实、已确认决策、建议和待定项”，不能把 Codex 建议误写成用户已经确认的结论。
 
 ## 1. 恢复上下文时先读什么
@@ -326,9 +326,9 @@ feedback 等数据若同时有 `user_id` 和 `session_id`，必须由服务端�
 
 ## 14. 当前下一步
 
-当前唯一主任务是计划中的 **P1-03**：完善 FastAPI 后端壳（配置分层、结构化错误、请求 ID、日志脱敏、测试夹具）；随后 P1-04 CI 最小门禁。
+当前唯一主任务是计划中的 **P1-04**：建立 GitHub Actions CI 最小门禁（前端 lint/typecheck/test/build、后端 lint/typecheck/test）；随后进入 P2 业务垂直切片。
 
-P1-01/P1-02 已于 2026-08-03 完成：仓库与根配置、backend FastAPI 健康检查骨架、frontend 完整前端壳（react-router 8.3.0 路由、主题、响应式、ErrorBoundary、API client）。提交 `8248b5f`、`846bee1`、`d1dfdba`。
+P1-01~P1-03 已于 2026-08-03 完成：仓库与根配置、frontend 完整前端壳（react-router 8.3.0 路由/主题/响应式/ErrorBoundary/API client）、backend FastAPI 壳（配置分层/统一错误/请求 ID/日志脱敏）。提交 `8248b5f`、`846bee1`、`d1dfdba`、`ec46112`。
 
 工程实现以 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 为契约基准。推迟到工程后的补测项（不伪造完成）：完整 3–5 人真人理解数据、”是否减少犹豫”证据。
 
@@ -469,3 +469,10 @@ P1-01/P1-02 已于 2026-08-03 完成：仓库与根配置、backend FastAPI 健�
 - 依赖安全：react-router 7.18.2 与 7.11.0 均命中 audit 通告（RSC CSRF / 旧批次），锁定 `react-router@8.3.0` 修复，`npm audit` 0 漏洞；CSR SPA 不依赖 react-router-dom 薄壳。
 - 验证：build/lint/test（3 文件 8 用例）/format:check 全绿；dev `/` 与 `/recommend` 200。
 - 清单进度 12/50；提交 `d1dfdba`；当前进行项 P1-03（后端壳）。
+
+### 2026-08-03 — MEM-018（P1-03 完成）
+
+- P1-03 后端壳完成：配置分层（pydantic-settings + secret_values）、统一错误契约（AppError + 4 handler，07 §4.2）、请求 ID（X-Request-ID 中间件 + 访问日志）、日志脱敏（RedactFilter 挂 app logger）、/health/live + /health/ready（未配 DB 时 database=not_configured）、create_app 工厂 + CORS。
+- 验证：pytest 15 / ruff / mypy strict 全绿；uvicorn 冒烟符合契约；提交 `ec46112`。
+- 技术要点（长期有效）：Starlette 的 ServerErrorMiddleware 发完 500 后仍重抛异常，测试 500 需 `TestClient(raise_server_exceptions=False)`；`Exception` handler 由 Starlette 路由到最外层 ServerErrorMiddleware。
+- 清单进度 13/50；当前进行项 P1-04（CI 最小门禁）。
