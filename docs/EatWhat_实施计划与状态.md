@@ -2,10 +2,10 @@
 
 > 这是项目后续执行的唯一实时计划清单。  
 > 最后更新：2026-08-04  
-> 当前阶段：P1 工程骨架  
-> 当前任务：P1-04 进行中——CI 工作流 `.github/workflows/ci.yml` 已编写并通过本地校验；待创建 GitHub 远端并推送以实际触发  
-> 清单进度：**13/50 已完成，1 项进行中（P1-04），36 项待开始**  
-> 工程状态：已 `git init`（main 分支，8 个提交，无远端）；frontend 完整前端壳、backend FastAPI 壳（pytest 15/ruff/mypy 全绿）；CI 工作流已编写（前端 lint/typecheck/test/build + 后端 ruff/mypy/pytest），本地命令全绿，待推送远端实际触发；尚未接入数据库、认证、AI、地图与业务功能
+> 当前阶段：P1 工程骨架完成，进入 P2 混合自适应问卷与规则候选垂直切片  
+> 当前任务：P1-04 已完成（CI 工作流编写 + 本地校验 + 建 private 远端 eatwhat + 推送 + GitHub Actions Run #30872862500 全绿：Frontend 20s ✓、Backend 20s ✓，总耗时 24s）；当前进行 P2-01 定义食物字典与输入 schema  
+> 清单进度：**14/50 已完成，1 项进行中（P2-01），35 项待开始**  
+> 工程状态：已 `git init`（main 分支，9 个提交；GitHub 远端 Shenhaihub/eatwhat@private，CI 全绿，origin/main 与本地同步）；frontend 完整前端壳、backend FastAPI 壳（pytest 15/ruff/mypy 全绿）；CI 最小门禁生效；尚未接入数据库、认证、AI、地图与业务功能
 
 ## 1. 使用规则
 
@@ -170,20 +170,22 @@
   - 验证：pytest 15 通过、ruff 通过、mypy strict 通过；uvicorn 冒烟 `/health/live` 200、`/health/ready` 返回 `database:"not_configured"`、`/nope` 404 统一错误体 + X-Request-ID 头、自定义 request-id 回显。
   - 提交：`ec46112`。
 
-- [>] **P1-04 建立 CI 最小门禁**
+- [x] **P1-04 建立 CI 最小门禁**
   - 依赖：P1-02、P1-03。
   - 预期成果：前端 lint/typecheck/test/build，后端 lint/typecheck/test。
   - 后续影响：从第一条业务切片开始阻止基础回归，而不是项目最后补测试。
-  - 当前进度：
-    - [x] 编写 `.github/workflows/ci.yml`：frontend/backend 两个并行 job，命令与本地一致——前端 `npm ci` + `lint`/`typecheck`/`test`/`build`，后端 `uv sync --frozen` + `ruff check .`/`mypy app`/`pytest -q`；Node 24、Python 3.13、uv 缓存。
-    - [x] YAML 语法校验通过（2 job、各 7 step、触发器 push/PR to main）；本地复跑 frontend lint/typecheck/test(8)/build 与 backend ruff/mypy/pytest(15) 全绿。
-    - [!] 实际触发需创建 GitHub 远端并推送（当前 `git remote` 为空），待用户决定仓库名与可见性；不伪造为已完成。
+  - 实际交付：
+    - [x] 编写 `.github/workflows/ci.yml`：frontend/backend 两个并行 job，命令与本地一致——前端 `npm ci` + `lint`/`typecheck`/`test`/`build`，后端 `uv sync --frozen` + `ruff check .`/`mypy app`/`pytest -q`；Node 24、Python 3.13、uv 缓存；push/PR to main 触发；concurrency 取消旧运行。
+    - [x] 本地验证：YAML 语法校验通过（2 job、各 7 step）；复跑 frontend lint/typecheck/test(8)/build 与 backend ruff/mypy/pytest(15) 全绿。
+    - [x] 远端：创建 GitHub private 仓库 `Shenhaihub/eatwhat`，首次推送 9 个提交，main 追踪 origin/main。
+    - [x] GitHub Actions 实跑：Run **30872862500** ✓ completed successfully（提交 `8c2feb4`，总耗时 24s）—— Frontend (lint/typecheck/test/build) 20s ✓、Backend (ruff/mypy/pytest) 20s ✓。
+  - 提交：`8c2feb4`。
 
 ### P2 混合自适应问卷与规则候选核心垂直切片
 
 目标：不调用 Live AI，先实现“2–3 个基础预设题 → 根据前序答案选择 2–3 个后续预设题 → 形成结构化上下文和规则候选”，为登录后的动态 AI 追问建立可靠基线。
 
-- [ ] **P2-01 定义食物字典与输入 schema**
+- [>] **P2-01 定义食物字典与输入 schema**
   - 依赖：P0-07、P1。
   - 为什么：稳定代码和标签必须先于规则与 AI。
   - 预期成果：`food_code`、展示文案、标签、排除映射和版本号。
@@ -575,10 +577,25 @@
 - 阻塞：CI 要真正触发需创建 GitHub 远端并推送，需用户决定仓库名/可见性；此为外部依赖，不伪造为已完成。
 - 对后续的影响：用户确认远端后，推送即可验证 CI 实际运行；之后进入 P2 业务垂直切片。
 
+### 2026-08-04 — PLAN-022（P1-04 完成 ✓ 14/50，GitHub CI 实跑全绿）
+
+- 状态：P1-04 完成 ✓（14/50）。P1 工程骨架全部关闭；当前进行项切换为 **P2-01** 定义食物字典与输入 schema。
+- 做了什么：
+  1. 用户选择 "提交并建远端验证 / eatwhat private / 你创仓我推送"。
+  2. 提交 `8c2feb4`（CI 工作流 + 计划/记忆同步）；指导用户在 GitHub 创建空 private 仓库 `eatwhat`（不勾选任何初始化）。
+  3. `git remote add origin https://github.com/Shenhaihub/eatwhat.git` + `git push -u origin main`，首次推送 9 个提交（origin/main 与本地完全同步，0 ahead/0 behind）。
+  4. 等待并在 GitHub Actions 页面实跑验证：Run **30872862500**（提交 `8c2feb4`）**✓ completed successfully，总耗时 24s**。
+     - Frontend (lint / typecheck / test / build) — 20s ✓
+     - Backend (ruff / mypy / pytest) — 20s ✓
+- 注意事项：
+  - Runner 控制台有一条关于 Node 20 2025-09-19 弃用的 blog 链接，来自 runner 内部依赖而非我们的 job（我们明确指定 `node-version: 24`），不受影响。
+  - 访问 private 仓库需要已登录的浏览器；我这边自动化浏览器通过 user 登录态后可直接读取；后续若未登录时会显示 404，属正常。
+- 对后续的影响：CI 已成为硬门禁，所有后续推送/PR 自动触发。下一主任务 P2-01 定义食物字典与输入 schema（对照 22 收敛清单 G-01~G-16、00 名词表、G-10 budget-as-soft-preference、G-12 随答案差异化与理由可追溯）。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. P1-04 CI 工作流 `.github/workflows/ci.yml` 已编写并通过本地校验；待用户决定是否创建 GitHub 远端并推送以实际触发 CI。远端确认并推送验证通过后，P1-04 关闭（14/50），进入 P2 业务垂直切片（P2-01 食物字典与输入 schema）。
+3. P1-04 已完成（14/50）：CI 工作流已就位，GitHub Actions Run #30872862500 全绿（24s）；当前主任务切换为 P2-01 定义食物字典与输入 schema（对照 22 收敛清单 G-01~G-16，特别是 G-10 预算软偏好、G-12 随答案差异化与理由可追溯）。
 4. P0-06 推迟的真人理解数据、工程后流程风险，均作为工程后复测项，不伪造完成。
 5. 每次开始实质工程步骤前，对照 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 校验实现口径。

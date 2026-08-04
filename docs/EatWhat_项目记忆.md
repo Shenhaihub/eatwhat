@@ -2,7 +2,7 @@
 
 > 用途：为长期 Codex 协作提供高精度、可恢复的项目上下文。  
 > 最后更新：2026-08-04  
-> 状态：P1 工程骨架进行中（P1-01~P1-03 已完成；P1-04 CI 工作流已编写并通过本地校验，待创建 GitHub 远端以实际触发）。  
+> 状态：P1 工程骨架全部完成；P2-01 定义食物字典与输入 schema [>] 进行中（14/50）。  
 > 注意：本文件记录”事实、已确认决策、建议和待定项”，不能把 Codex 建议误写成用户已经确认的结论。
 
 ## 1. 恢复上下文时先读什么
@@ -33,8 +33,8 @@
 - 项目名：EatWhat。
 - 形态：响应式 Web 优先，兼容移动端和桌面端。
 - 当前目录：`D:\A622\项目\AgentWork\project0717`（2026-08-03 复制后的工作区；原路径 `D:\A622\项目\project0717` 仍存在，两处内容一致）。
-- 当前仓库事实：已有 `docs/`、`prototype/eatwhat-p0/` 可点击原型，以及 `frontend/`（React/Vite/TS 前端壳）和 `backend/`（FastAPI 后端壳）。截至 2026-08-03 已在本工作区 `git init`（main 分支），现有 8 个提交、无 GitHub 远端；原路径 `.git` 在源头为空（非复制丢失）。
-- 当前阶段：P0（产品/原型/技术文档收敛）已完成；P1 工程骨架进行中（P1-01~P1-03 完成，P1-04 CI 工作流已编写待远端触发）。尚未接入数据库、认证、AI、地图与业务功能；不能称为“产品功能已开发”。
+- 当前仓库事实：已有 `docs/`、`prototype/eatwhat-p0/` 可点击原型，以及 `frontend/`（React/Vite/TS 前端壳）和 `backend/`（FastAPI 后端壳）。截至 2026-08-04 已在本工作区 `git init`（main 分支），现有 9 个提交；GitHub 远端 `https://github.com/Shenhaihub/eatwhat`（private）已建立并同步；origin/main 与本地完全一致；CI 最小门禁实跑全绿。
+- 当前阶段：P0（产品/原型/技术文档收敛）已完成；P1（工程骨架）已完成（14/50）；P2 业务垂直切片（混合自适应问卷与规则候选）进行中，当前主任务 P2-01 定义食物字典与输入 schema。尚未接入数据库、认证、AI、地图与业务功能；不能称为"产品功能已开发"。
 - 用户背景：Python 有基础，但整体仍是全栈初学者；主要使用 Windows，希望依赖 Codex 逐步完成第一个完整项目。
 - 项目双重目标：做出真实可用的产品，同时形成结构完整、可以展示工程能力的 GitHub 作品。
 
@@ -327,11 +327,11 @@ feedback 等数据若同时有 `user_id` 和 `session_id`，必须由服务端�
 
 ## 14. 当前下一步
 
-当前唯一主任务是计划中的 **P1-04**：建立 GitHub Actions CI 最小门禁（前端 lint/typecheck/test/build、后端 lint/typecheck/test）。2026-08-04 已编写 `.github/workflows/ci.yml`（frontend/backend 两个并行 job，命令与本地一致）并通过 YAML 语法校验与本地命令复跑（frontend 8 用例/build、backend ruff/mypy/pytest 15 全绿）；**实际 GitHub 触发待用户决定是否创建远端并推送**（当前无远端）。P1-04 关闭后进入 P2 业务垂直切片（P2-01 食物字典与输入 schema）。
+当前唯一主任务是计划中的 **P2-01**：定义食物字典与输入 schema。对照 22 收敛清单 G-01~G-16，特别是 G-10 预算只作软偏好、G-12 推荐必须随答案差异化且理由可追溯、G-07 source_type 服务端派生、G-08 规则回退必须非空。
 
-P1-01~P1-03 已于 2026-08-03 完成：仓库与根配置、frontend 完整前端壳（react-router 8.3.0 路由/主题/响应式/ErrorBoundary/API client）、backend FastAPI 壳（配置分层/统一错误/请求 ID/日志脱敏）。提交 `8248b5f`、`846bee1`、`d1dfdba`、`ec46112`。
+P1-01~P1-04 已完成：仓库与根配置 `8248b5f/846bee1`、frontend 完整前端壳 `d1dfdba`、backend FastAPI 壳 `ec46112`、CI 工作流+GitHub private 远端+Actions 全绿 `8c2feb4`。P1 工程骨架全部关闭（14/50）。CI 已成为硬门禁：GitHub Actions Run #30872862500（24s）frontend 20s ✓、backend 20s ✓。
 
-工程实现以 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 为契约基准。推迟到工程后的补测项（不伪造完成）：完整 3–5 人真人理解数据、”是否减少犹豫”证据。
+工程实现以 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 为契约基准。推迟到工程后的补测项（不伪造完成）：完整 3–5 人真人理解数据、"是否减少犹豫"证据。
 
 每次继续先读本文件、计划顶部状态和最新执行日志。
 
@@ -492,3 +492,15 @@ P1-01~P1-03 已于 2026-08-03 完成：仓库与根配置、frontend 完整前�
 - 修正文档漂移：实施计划顶部原写"5 个提交"（实际 8，含两份交接文档提交 684dcc0/e35cde0），已更正；项目记忆 §2 仓库事实与当前阶段陈旧表述已更新。
 - 阻塞（不伪造完成）：CI 实际触发需创建 GitHub 远端并推送，待用户决定仓库名/可见性；在此之前 P1-04 保持进行中。
 - 清单仍为 13/50；P1-04 远端验证通过后关闭升为 14/50，进入 P2-01。
+
+### 2026-08-04 — MEM-022（P1-04 完成 ✓ CI 实跑全绿 14/50，P2-01 进行中）
+
+- 用户选择 "提交并建远端验证 / eatwhat private / 你创仓我推送"。
+- 提交 `8c2feb4`（新增 `.github/workflows/ci.yml` + 同步计划与记忆）；指导用户创建 GitHub 空 private 仓库 `Shenhaihub/eatwhat`（不勾选任何初始化文件，避免出现独立首提交导致推送冲突）。
+- `git remote add origin https://github.com/Shenhaihub/eatwhat.git` + `git push -u origin main`；首次推送 9 个提交，origin/main 与本地完全同步（0 ahead/0 behind）。
+- GitHub Actions 实跑验证通过：Run **30872862500**，提交 `8c2feb4`，**✓ completed successfully，总耗时 24s**：
+  - Frontend (lint / typecheck / test / build) — 20s ✓
+  - Backend (ruff / mypy / pytest) — 20s ✓
+- 注意：Runner 控制台有 Node 20 弃用 blog 链接，来自 runner 内部依赖而非我们的 job（我们指定 `node-version: 24`），不受影响。
+- P1 工程骨架全部关闭（P1-01~P1-04），14/50；当前主任务切换为 P2-01 定义食物字典与输入 schema。
+- 下一次继续：对照 22 收敛清单 G-01~G-16，特别是 G-09（分享字段上限）、G-10（预算软偏好，不保证商家符合，价格仅作为食物方向提示）、G-11（医学忌口与普通偏好字段分层，不把"避开"承诺写成医学安全承诺）、G-12（推荐必须随答案差异化且理由可追溯，禁止固定首候选）、G-15（社区/活动首版必做）。
