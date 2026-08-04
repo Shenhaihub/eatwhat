@@ -3,9 +3,9 @@
 > 这是项目后续执行的唯一实时计划清单。  
 > 最后更新：2026-08-04  
 > 当前阶段：P1 工程骨架完成，进入 P2 混合自适应问卷与规则候选垂直切片  
-> 当前任务：P2-01 已完成（15/50）—— 食物字典 v1.0（15 条）、后端 Pydantic schema + 枚举 + 加载器 + 37 单测全绿、前端 1:1 TS 类型全绿、GitHub CI 连续 3 次通过；当前进行 P2-02 实现确定性规则引擎  
-> 清单进度：**15/50 已完成，1 项进行中（P2-02 规则引擎），34 项待开始**  
-> 工程状态：已 `git init`（main 分支，11 个提交；GitHub 远端 Shenhaihub/eatwhat@private，3 次 CI 连续全绿）；frontend 完整前端壳；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ schema/枚举/加载器/测试（pytest 37）；前端 1:1 TS 类型；尚未接入规则引擎、问卷状态机、数据库、认证、AI、地图与业务功能
+> 当前任务：P2-02 已完成（16/50）—— 确定性规则引擎 v1.0（正好 5 条 + 稳定输出 + G-08 不空 + G-12/MEM-024 反"小碗菜固定第一" 5 组参数化通过），后端 58 单测全绿、前端 lint/typecheck/test(8)/build 全绿、GitHub CI 连续 5 次通过；当前推进 P2-03 基础题与自适应预设题状态机  
+> 清单进度：**16/50 已完成，1 项进行中（P2-03 状态机），33 项待开始**  
+> 工程状态：已 `git init`（main 分支，12 个提交；GitHub 远端 Shenhaihub/eatwhat@private，5 次 CI 连续全绿）；frontend 完整前端壳；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ schema/枚举/加载器/37 测试 + P2-02 规则引擎服务/21 测试；前端 1:1 TS 类型；尚未接入问卷状态机、next API、数据库、认证、AI、地图与业务功能
 
 ## 1. 使用规则
 
@@ -200,11 +200,22 @@
     - [x] CI 门禁：后端 ruff/mypy/37pytest 全绿；前端 lint/typecheck/8tests/build 全绿；GitHub Actions Run 3（`c36f1f0`）**36s completed successfully**（第 3 次连续通过）。
   - 提交：`c36f1f0`。
 
-- [>] **P2-02 实现确定性规则引擎**
+- [x] **P2-02 实现确定性规则引擎**
   - 预期成果：候选过滤、评分、并列处理、理由模板和非空回退。
   - 验收：相同输入与字典版本得到稳定输出；任何合法输入至少返回 1 个答案；不同合法答案组合必须产生差异化的候选或排序，且理由可追溯到具体答案——不允许所有组合恒返回同一固定首候选（来源：P0-06 关闭时用户实测发现流程原型固定首候选"小碗菜"不随答案变化，本项为防止工程复现）；边界有单元测试。
+  - 实际关闭（全部达成 ✓ 16/50）：
+    - [x] 后端 `app/services/rule_engine.py` 主入口 `generate_rule_recommendations(answers?, dictionary_version, *, repo?)`：输入 QuestionnaireAnswers + 字典版本 → 正好 5 条 RecommendationItem（priority 1–5 连续）；source_type=ai_recommended 服务端派生、generation_mode=rule（G-07）。
+    - [x] 评分：七维匹配(+3)/强命中(+5)/不匹配(-6)/priority_boost 原值，后者占比≤~10%（MEM-024 防"权重全靠常数项导致恒小碗菜第一"）。
+    - [x] 稳定 tie-break：不用 random；同分按 priority_boost → 菜系族标签数 → food_code 字母序，保证"输入相同+字典相同→输出稳定"。
+    - [x] G-08 不空：空 answers、七维全塞、极端忌口，均正好 5 条（启用池≥5 由加载器保证）。
+    - [x] G-12 / MEM-024 反"小碗菜固定第一"：5 组参数化不同答案（默认空 / 下午茶清淡>30 / 宵夜辣+麻辣烫偏好 / 午餐轻食素食<20 / 早餐清淡+牛肉面偏好）→ 单元测试断言 ≥4 种 Top5 顺序不同；且 ≥2 组首候选 ≠ xiaowan_cai。实测 5 组中 5 种排序（unique=5）、3 组首候选 ≠ xiaowan_cai，超过验收门槛。
+    - [x] 每条 RecommendationReason.matched_signals ≥ 1（G-12 理由可追溯）；空 answers 兜底信号 `default_sort_fallback:<food_code>`；summary_zh 中文理由摘要 1–160 字符，取前 3 个命中点（按 明确偏好 > 忌口 > 口味 > 预算 > 餐段 > 食量 的优先顺序）。
+    - [x] 明确偏好麻辣烫（ExplicitPreference=malatang）+ 口味辣：malatang 必在 Top5，且信号含 `explicit_food:malatang`。
+    - [x] 后端 `tests/test_rule_engine.py`：21 用例全绿（基础结构 4 / 稳定性 2 / 明确偏好 1 / G-08 不空 2 / G-12&MEM-024 差异化 12）；连 P2-01 37 合计 58 用例。
+    - [x] 全部门禁：后端 ruff/mypy/pytest(58) 全绿；前端 oxlint/tsc/vitest(8)/vite build 全绿；提交 `efe1a58` → push → **GitHub Actions Run 5 全绿 31s**（第 5 次连续通过）。
+  - 提交：`efe1a58`。
 
-- [ ] **P2-03 实现基础题与自适应预设题状态机**
+- [>] **P2-03 实现基础题与自适应预设题状态机**
   - 依赖：P2-01、P2-02。
   - 预期成果：基础 2–3 题、后续 2–3 题的选择条件、七个信息维度覆盖检查、校验、进度、返回修改、草稿保存与重新开始。
   - 验收：未登录可完成前置问卷；修改早期答案会使不再适用的后续答案失效并重新选题；任何路径都不会遗漏必要维度。
@@ -619,15 +630,34 @@
   - `source_type` 由服务端派生，前端禁止传——如果 P2-04 API 路由收到客户端传的 source_type，必须报错。
 - 对后续的影响：P2-02 可直接依赖 `QuestionnaireAnswers`（输入）、`FoodDictionaryRepository`（查询）、`RecommendationItem/Reason`（输出）四件，直接产出确定性 5 条候选（正好 5、priority 1–5、均在启用词典内）。
 
+### 2026-08-04 — PLAN-024（P2-02 完成 ✓ 16/50，确定性规则引擎 v1.0 + 反"固定首候选"参数化，CI 5 连绿）
+
+- 状态：P2-02 完成 ✓（16/50）。P2 核心垂直切片继续推进；当前唯一进行项切换为 **P2-03** 实现基础题与自适应预设题状态机（依赖 P2-01/P2-02）。
+- 用户前置强调（MEM-024 同步记入）：**严禁"多链路最后导向同一首候选"（尤其"小碗菜"恒第一）**——本步以参数化测试焊死，不能靠文档说说。
+- 做了什么：
+  1. 规则引擎服务新增 `backend/app/services/rule_engine.py`：主入口 `generate_rule_recommendations(answers?, dictionary_version, *, repo?)`；正好 5 条 RecommendationItem（priority 1–5 连续）；source_type=ai_recommended（服务端派生，G-07）、generation_mode=rule。
+  2. 评分与稳定：七维命中+3/强命中+5/不匹配-6；priority_boost 仅占≤~10%（改答案必改分——防 MEM-024 "常数顶起小碗菜"）；tie-break 按 priority_boost→菜系族标签数→food_code 字母序，完全不用 random → 相同输入稳定。
+  3. G-12 理由可追溯：每条 RecommendationReason.matched_signals ≥ 1（兜底信号 `default_sort_fallback:<food_code>`）；summary_zh 中文摘要按 明确偏好 > 忌口 > 口味 > 预算 > 餐段 > 食量 的命中点优先顺序取前 3，1–160 字。
+  4. 测试 `backend/tests/test_rule_engine.py`：21 用例（基础结构 4 / 稳定性 2 / 明确偏好 1 / G-08 不空 2 / G-12&MEM-024 差异化 12），加上 P2-01 37 → **合计 58 pytest 全绿**。
+  5. G-12 / MEM-024 强断言过线：5 组差异化答案（默认空 / 下午茶清淡>30 / 宵夜辣+麻辣烫偏好 / 午餐轻食素食<20 / 早餐清淡+牛肉面偏好）→ 实测 5 种不同 Top5 排序、3 组首候选 ≠ xiaowan_cai，超过 "≥4 种排序 / ≥2 组非小碗菜第一" 的验收门槛。
+  6. 全链路门禁 + CI：后端 ruff/mypy 0 报错；前端 oxlint/tsc/vitest(8)/vite build 全绿；提交 `efe1a58` → push → **GitHub Actions Run 5 全绿 31s**（CI 第 5 次连续通过，门禁稳定性进一步确认）。
+- 注意事项：
+  - `source_type=ai_recommended` 语义：按 G-07 四值选"AI 推荐入口"词——虽然路径是 rule，但 source_type 本来就不承担"路径"语义（路径由 generation_mode=rule 标注），两个字段各司其职，不违反 G-07。
+  - G-11 医学边界：规则引擎**不做"因医学过敏而排除"逻辑**——字典里有 medical_allergen_tags + safety_note 仅做展示/提醒，规则引擎层面只扣"用户说不吃的一般忌口"，医学相关一律留给前端展示免责声明，保持 G-11 边界清晰。
+  - MEM-024 的盯防后续适用：P2-03/P2-03A（状态机/next API）本身不直接生成推荐，但若后续接 HTTP 之后做端到端验证，仍要保证"问卷不同答案 → 推荐排序或首候选不同"——本步已把这条写入 §8 操作顺序第 6 条，防止后续忘。
+- 对后续的影响：
+  - P2-03 状态机可直接以七维字段覆盖度作为"是否已问完"的判断依据（QuestionnaireAnswers 八维字段齐全 / 或入口意图对应维度齐全即可完成）。
+  - P2-03A 的 `POST /api/v1/questionnaire/next` 完成后，前端拿到 answers_complete=true 时，直接把完整 answers 调 `generate_rule_recommendations` 就是 P2-04 的 5 条候选展示——后端已经把调用链打通，只差一层 FastAPI 路由包装。
+  - P5 接 AI 时，`generation_mode=ai` 但 G-12 依然要过（同样需要 4 组以上的差异化参数化测试），不能因为接了 AI 就放松 MEM-024。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. P2-01 已完成（15/50）：食物字典 v1.0（15 条）+ 后端 schema/枚举/加载器（37 用例全绿）+ 前端 1:1 TS 类型（lint/typecheck/8tests/build 全绿）+ GitHub CI 连续 3 次通过。当前主任务切换为 **P2-02 实现确定性规则引擎**，核心验收点：
-   - 输入 `QuestionnaireAnswers` + 字典版本 → 输出正好 5 条 `RecommendationItem`（priority 1–5）
-   - 相同输入稳定输出；任何合法输入至少 5 条不空（G-08）
-   - 至少验证 4 组不同答案组合产生**不同的首候选**或**不同排序**（G-12 防固定首候选"小碗菜"复现）
-   - 每条 `RecommendationReason.matched_signals` ≥ 1，且可追溯到具体答案或标签（G-12 理由可追溯）
-   - `source_type` 由服务端派生（不允许客户端传），`generation_mode=rule`（首版规则，P5 再接 AI）
-4. P0-06 推迟的真人理解数据、工程后流程风险，均作为工程后复测项，不伪造完成。
-5. 每次开始实质工程步骤前，对照 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 校验实现口径。
+3. P2-02 已完成（16/50）：确定性规则引擎 v1.0 + 21 新单测（合计 58）全绿 + GitHub CI 连续 5 次通过（Run 5 `efe1a58` 31s）。当前主任务切换为 **P2-03 实现基础题与自适应预设题状态机**，核心验收点：
+   - 基础 2–3 题 + 后续 2–3 题的条件选择，覆盖入口意图决定的七维完整度
+   - 修改早期答案 → 失效答案 ID 返回 + 重算后续路径
+   - 草稿保存/恢复/重置；未登录本地完成前置问卷
+4. P2-03A 是 P2-03 的 HTTP 化（POST /api/v1/questionnaire/next，每次重算确定性 DAG，禁止 AI），依赖 P2-03 状态模型先定稿。
+5. P0-06 推迟的真人理解数据、工程后流程风险，均作为工程后复测项，不伪造完成。
+6. 每次开始实质工程步骤前，对照 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 校验实现口径；对 G-12 及 MEM-024（反"固定首候选小碗菜"）做强化盯防——任何推荐生成路径都必须附带 ≥4 组不同答案组合产生不同排序/首候选的参数化测试。

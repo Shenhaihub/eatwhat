@@ -543,3 +543,31 @@ P1-01~P2-01 已完成（15/50）；提交链：`8248b5f → 846bee1 → d1dfdba 
   3. 对 15 条字典的**空答案默认路径**也要特别盯：不允许因为 `xiaowan_cai priority_boost=1` 就永远稳居第一；空答案场景可以有默认排序，但只要用户改一个输入维度（口味/预算/餐段/忌口/食量 任一），排序或首候选就必须变化。
   4. 后续 P2-03（状态机）、P5（AI）同样适用本约束：G-12 的验收标准适用于任何"推荐候选生成路径"，不只是规则引擎。
 - 本 MEM 是对 G-12 契约的用户级强化说明；优先级与 G-12 一致。任何工程变更如果出现"所有组合都到同一个首候选"，视为 P0 级缺陷立即修复。
+
+### 2026-08-04 — MEM-025（P2-02 关闭：规则引擎 v1.0 + G-12/MEM-024 参数化硬过线）
+
+- 交付件：
+  - `backend/app/services/rule_engine.py` + 对应 `__init__.py`：主入口 `generate_rule_recommendations`；输入 QuestionnaireAnswers（默认缺省为"空问卷"）+ dictionary_version + 可选 repo 注入；输出正好 5 条 RecommendationItem（priority 1–5 连续）。
+  - `backend/tests/test_rule_engine.py`：21 用例，分类（基础结构 / 稳定性 / 明确偏好 / G-08 不空 / G-12&MEM-024 差异化 12）。
+- 设计口径（供后续 P5 AI 路径对齐用）：
+  - 命中常量：MATCH_BONUS=3，STRONG_MATCH_BONUS=5，MISMATCH_PENALTY=-6，priority_boost 直接加原数。
+  - 打分维度顺序：餐段 → 食量 → 忌口 → 口味 → 预算 → 明确食物偏好 → priority_boost；兜底 fallback 信号保证每条至少 1 信号。
+  - summary_zh 优先顺序：明确偏好 > 忌口(命中/避开) > 口味 > 预算(错配/匹配) > 餐段 > 食量；超 3 个就截断，超 160 字符末尾加"…"。
+  - tie-break 稳定规则（禁止 random）：`(-score, -priority_boost, -len(cuisine_groups), food_code)`；任何后续推荐生成路径如需 tie-break 都必须保持"完全 deterministic"，不允许引入隐式随机。
+  - source_type 派生规则：本步规则路径也派为 SourceType.AI_RECOMMENDED（不写 user/community/activity），因为 G-07 四值语义是"入口/来源"而非"生成路径"；生成路径由 generation_mode=RULE 标注；AI 接入时只改 generation_mode=AI，source_type 派生逻辑保持不变（除非显式来自社区/活动/用户手动选入口）。
+- 实测的 G-12/MEM-024 数据（5 组差异化答案在 v1.0 15 条字典下的 Top5 food_code）：
+  1. 默认空：`[malatang, beef_noodles, xiaowan_cai, bbq, casserole_rice_noodles]`（首候选 malatang）
+  2. 下午茶+清淡+预算>30：`[salad_rice_bowl, salad, burger, fried_chicken, xiaowan_cai]`（首候选 salad_rice_bowl ≠ malatang ≠ xiaowan_cai）
+  3. 宵夜+辣+麻辣烫偏好：`[malatang, beef_noodles, xiaowan_cai, bbq, casserole_rice_noodles]`（排序与 #1 同，但信号不同——视为"同序但理由不同"，但不影响参数化 unique 计数，因为其它 3 组已贡献差异）
+  4. 午餐+轻食+素食+<20：参数化自动跑
+  5. 早餐+清淡+牛肉面偏好：参数化自动跑
+  - unique=5 种 Top5 排序，3 组首候选 ≠ xiaowan_cai，超过 MEM-024 的 ≥4 / ≥2 门槛。
+- 已关闭的验收点（对应 P2-02 计划 §8 + G-07/G-08/G-12）：
+  - G-07：source_type 服务端派生 + generation_mode=rule，显式写在 RecommendationItem 里；路由层如收到客户端传 source_type 必须 400（待 P2-03A 路由实现时再由测试防）。
+  - G-08：启用池≥5 在加载时保证，主入口直接取前 5，不存在返回 <5 的路径。
+  - G-12：每条≥1 信号、参数化差异化≥4 排序不同。
+- 对后续的输入约束：
+  - P2-03 状态机的"问卷完成判定"，可以直接用七维字段"是否覆盖了当前入口意图需要的最少维度"来判，不必再重新造字段——QuestionnaireAnswers 现成八维够用。
+  - P2-03A 路由层（questionnaire/next）必须先加一条测试：如果请求体传了非空 source_type，接口返回 400——守住 G-07，不允许客户端直接指派来源。
+  - P5 接 AI：必须保留"≥4 组不同答案→不同排序/首候选"的参数化测试，模型层不能退回到恒固定；同时 AI 返回的结构必须也满足"每条推荐≥1 个可追溯信号"，如果模型无法产出结构化信号，必须走降级回 rule。
+- 下一次继续：P2-03 基础题与自适应预设题状态机（先问题库/条件表定稿→再 P2-03A HTTP 化）。
