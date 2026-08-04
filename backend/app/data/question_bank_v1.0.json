@@ -1,0 +1,117 @@
+{
+  "questionnaire_version": "v1.0",
+  "questions": [
+    {
+      "question_id": "q01_meal_period",
+      "title_zh": "现在想吃哪顿饭？",
+      "question_type": "single_choice",
+      "options": [
+        {"option_id": "breakfast", "label_zh": "早餐", "value": "breakfast"},
+        {"option_id": "lunch", "label_zh": "午餐", "value": "lunch"},
+        {"option_id": "afternoon_tea", "label_zh": "下午茶", "value": "afternoon_tea"},
+        {"option_id": "dinner", "label_zh": "晚餐", "value": "dinner"},
+        {"option_id": "midnight_snack", "label_zh": "宵夜", "value": "midnight_snack"}
+      ],
+      "maps_to": {
+        "field_name": "meal_period",
+        "is_array": false,
+        "value_is_enum_value": true
+      },
+      "display_if": null,
+      "required_for_entry_intents": ["ai_recommend"]
+    },
+    {
+      "question_id": "q02_explicit_food",
+      "title_zh": "现在有明确想吃的吗？",
+      "question_type": "single_choice",
+      "options": [
+        {"option_id": "undecided", "label_zh": "没想好，随便推荐", "value": "undecided"},
+        {"option_id": "malatang", "label_zh": "麻辣烫", "value": "malatang"},
+        {"option_id": "beef_noodles", "label_zh": "牛肉面", "value": "beef_noodles"}
+      ],
+      "maps_to": {
+        "field_name": "explicit_food_preference",
+        "is_array": false,
+        "value_is_enum_value": true
+      },
+      "display_if": null,
+      "required_for_entry_intents": ["ai_recommend"]
+    },
+    {
+      "question_id": "q03_budget",
+      "title_zh": "预算大概多少？",
+      "question_type": "single_choice",
+      "options": [
+        {"option_id": "under_20", "label_zh": "20 元以内", "value": "under_20"},
+        {"option_id": "from_20_to_30", "label_zh": "20–30 元", "value": "from_20_to_30"},
+        {"option_id": "over_30", "label_zh": "30 元以上也能接受", "value": "over_30"}
+      ],
+      "maps_to": {
+        "field_name": "budget",
+        "is_array": false,
+        "value_is_enum_value": true
+      },
+      "display_if": null,
+      "required_for_entry_intents": ["ai_recommend"]
+    },
+    {
+      "question_id": "q04_tastes",
+      "title_zh": "口味偏好？（可多选，不选=随便）",
+      "question_type": "multi_choice",
+      "options": [
+        {"option_id": "any", "label_zh": "随便", "value": "any"},
+        {"option_id": "light", "label_zh": "清淡", "value": "light"},
+        {"option_id": "spicy", "label_zh": "辣", "value": "spicy"},
+        {"option_id": "sour", "label_zh": "酸", "value": "sour"},
+        {"option_id": "sweet", "label_zh": "甜", "value": "sweet"},
+        {"option_id": "salty", "label_zh": "咸鲜", "value": "salty"}
+      ],
+      "maps_to": {
+        "field_name": "tastes",
+        "is_array": true,
+        "value_is_enum_value": true
+      },
+      "display_if": {"operator": "always_true"},
+      "required_for_entry_intents": []
+    },
+    {
+      "question_id": "q05_avoidances",
+      "title_zh": "有什么忌口不吃的吗？（可多选，不选=都吃）",
+      "question_type": "multi_choice",
+      "options": [
+        {"option_id": "none", "label_zh": "都吃", "value": "none"},
+        {"option_id": "seafood", "label_zh": "不吃海鲜类", "value": "seafood"},
+        {"option_id": "meat", "label_zh": "不吃肉类（素食）", "value": "meat"},
+        {"option_id": "vegetarian", "label_zh": "严格素食", "value": "vegetarian"}
+      ],
+      "maps_to": {
+        "field_name": "avoidances",
+        "is_array": true,
+        "value_is_enum_value": true
+      },
+      "display_if": {"operator": "always_true"},
+      "required_for_entry_intents": []
+    },
+    {
+      "question_id": "q06_appetite",
+      "title_zh": "现在饿不饿？",
+      "question_type": "single_choice",
+      "options": [
+        {"option_id": "light", "label_zh": "没啥胃口，来一点", "value": "light"},
+        {"option_id": "normal", "label_zh": "正常就行", "value": "normal"},
+        {"option_id": "hungry", "label_zh": "很饿，要吃饱", "value": "hungry"}
+      ],
+      "maps_to": {
+        "field_name": "appetite",
+        "is_array": false,
+        "value_is_enum_value": true
+      },
+      "display_if": {
+        "operator": "in",
+        "operand_question_id": "q01_meal_period",
+        "operand_value": ["lunch", "dinner", "midnight_snack"]
+      },
+      "required_for_entry_intents": []
+    }
+  ]
+}
