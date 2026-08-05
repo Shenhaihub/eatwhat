@@ -89,7 +89,7 @@ class TestAiRecommendFullPath:
             answers_by_question_id={},
         )
         assert res.is_complete is False
-        assert res.progress_pct == 0
+        assert res.progress == 0
         assert set(res.required_not_yet_answered_question_ids) == {
             "q01_meal_period",
             "q02_explicit_food",
@@ -111,7 +111,9 @@ class TestAiRecommendFullPath:
         )
         assert res.is_complete is True
         assert res.completion_reason == "all_required_answered"
-        assert res.progress_pct == 100
+        assert res.progress == 100
+        assert res.progress_pct == res.progress  # 兼容冗余字段恒等
+        assert res.next_action == "proceed_generate_recommendations"
         # 六维覆盖：meal_period、explicit_food_preference、budget 三个 covered=true
         covered = {c.field_name: c.covered for c in res.covered_dimensions}
         assert covered["meal_period"] is True
@@ -145,7 +147,10 @@ class TestModifyEarlyAnswerInvalidatesLater:
             answers_by_question_id=answers,
         )
         assert before.is_complete
-        assert before.invalidated_answer_question_ids == []
+        assert before.invalidated_answer_ids == []
+        # 冗余兼容字段必须与主字段恒等
+        assert before.invalidated_answer_question_ids == before.invalidated_answer_ids
+        assert before.progress_pct == before.progress
 
         # Step B. 改 Q01 → afternoon_tea（下午茶）。Q06 的 display_if 要求 lunch/dinner/midnight_snack，
         # 所以 Q06 现在不 active，而且之前答了 → 必须出现在 invalidated 中
@@ -156,9 +161,11 @@ class TestModifyEarlyAnswerInvalidatesLater:
             entry_intent="ai_recommend",
             answers_by_question_id=answers_mod,
         )
-        assert "q06_appetite" in after.invalidated_answer_question_ids, (
+        assert "q06_appetite" in after.invalidated_answer_ids, (
             "修改 Q01=下午茶 使 Q6_appetite 展示条件不成立，应被作废"
         )
+        # 兼容字段恒等
+        assert after.invalidated_answer_question_ids == after.invalidated_answer_ids
         # covered_dimensions 中 appetite 应该变成 false（因为答被作废了）
         covered_after = {c.field_name: c.covered for c in after.covered_dimensions}
         assert covered_after["appetite"] is False
@@ -176,7 +183,9 @@ class TestNonRecommendEntrySkipsQuestionnaire:
         )
         assert res.is_complete is True
         assert res.completion_reason == "entry_intent_no_questionnaire_required"
-        assert res.progress_pct == 100
+        assert res.progress == 100
+        assert res.progress_pct == res.progress  # 兼容冗余字段恒等
+        assert res.next_action == "redirect_no_questionnaire_required"
 
 
 # ============== 草稿 round-trip ==============
@@ -233,3 +242,97 @@ class TestDeterministic:
         a = recompute_questionnaire(**kwargs)
         b = recompute_questionnaire(**kwargs)
         assert a.model_dump(mode="json") == b.model_dump(mode="json")
+
+
+# ============== 新字段与 P2-03A 清单对齐验证 ==============
+
+
+class TestFieldsAlignedWithP03A:
+    """确保状态机返回 1:1 映射到 P2-03A /api/v1/questionnaire/next 响应，避免 API 层再做别名转换。"""
+
+    def test_next_questions_object_array_matches_next_ids(self, bank_v1):
+        """next_questions（对象数组）的 question_id 顺序必须与 next_question_ids 恒等。"""
+        # 空答案 → 第一步 next 是 q01/q02（前两个必填）
+        res = recompute_questionnaire(
+            bank=bank_v1,
+            entry_intent="ai_recommend",
+            answers_by_question_id={},
+        )
+        assert [q.question_id for q in res.next_questions] == res.next_question_ids
+        # 题对象不为空、extra=forbid（Pydantic 默认不会传不该传的字段）
+        for q in res.next_questions:
+            assert q.question_id
+            assert q.title_zh
+            assert len(q.options) >= 1
+
+    def test_next_action_matrix(self, bank_v1):
+        """next_action 三值矩阵：proceed_questionnaire / proceed_generate_recommendations / redirect_no_questionnaire_required。"""
+        # 1) 未答任何题 → 继续答题
+        r1 = recompute_questionnaire(
+            bank=bank_v1, entry_intent="ai_recommend", answers_by_question_id={}
+        )
+        assert r1.next_action == "proceed_questionnaire"
+        assert r1.is_complete is False
+        # 2) 三题必答都答完 → 完整后 proceed_generate_recommendations
+        r2 = recompute_questionnaire(
+            bank=bank_v1,
+            entry_intent="ai_recommend",
+            answers_by_question_id={
+                "q01_meal_period": ["breakfast"],
+                "q02_explicit_food": ["undecided"],
+                "q03_budget": ["under_20"],
+            },
+        )
+        assert r2.next_action == "proceed_generate_recommendations"
+        assert r2.is_complete is True
+        # 3) community 入口 → redirect_no_questionnaire_required
+        r3 = recompute_questionnaire(
+            bank=bank_v1, entry_intent="community", answers_by_question_id={}
+        )
+        assert r3.next_action == "redirect_no_questionnaire_required"
+        assert r3.is_complete is True
+        # 4) activity 入口 → 同上
+        r4 = recompute_questionnaire(
+            bank=bank_v1, entry_intent="activity", answers_by_question_id={}
+        )
+        assert r4.next_action == "redirect_no_questionnaire_required"
+
+    def test_deprecated_alias_fields_equals_main_fields(self, bank_v1):
+        """兼容老字段：progress_pct == progress / invalidated_answer_question_ids == invalidated_answer_ids。"""
+        res = recompute_questionnaire(
+            bank=bank_v1,
+            entry_intent="ai_recommend",
+            answers_by_question_id={
+                "q01_meal_period": ["afternoon_tea"],  # appetite 题 display=false → Q6 答了就作废
+                "q02_explicit_food": ["undecided"],
+                "q03_budget": ["from_20_to_30"],
+                "q06_appetite": ["big_eater"],  # active=false → 进 invalidated
+            },
+        )
+        assert res.progress == res.progress_pct
+        assert res.invalidated_answer_ids == res.invalidated_answer_question_ids
+        assert "q06_appetite" in res.invalidated_answer_ids
+        # 新字段 invalidated_answer_ids 是主名，已在测试中覆盖
+
+    def test_new_fields_in_json_dump_include_next_action_and_next_questions(self, bank_v1):
+        """model_dump(mode=json) 必须包含 next_action / next_questions 字段，API 层直接 1:1 透出。"""
+        res = recompute_questionnaire(
+            bank=bank_v1, entry_intent="ai_recommend", answers_by_question_id={}
+        )
+        d = res.model_dump(mode="json")
+        # 清单约定的关键字段必须存在，且没有被 exclude。这样 API 层只需直接 return res 即可。
+        for k in (
+            "questionnaire_version",
+            "next_questions",
+            "next_question_ids",
+            "invalidated_answer_ids",
+            "is_complete",
+            "progress",
+            "covered_dimensions",
+            "next_action",
+        ):
+            assert k in d, f"key {k!r} missing in model_dump json，将导致 API 层需手工补字段"
+        # 清单名 invalidated_answer_question_ids 作为 deprecated 也允许保留，
+        # 但不再作为 P2-03A 文档推荐字段（API response_model 里可以 exclude）
+        assert "invalidated_answer_question_ids" in d
+        assert "progress_pct" in d

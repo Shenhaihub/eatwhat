@@ -2,8 +2,8 @@
 
 > 用途：为长期 Codex 协作提供高精度、可恢复的项目上下文。  
 > 最后更新：2026-08-04  
-> 状态：P2 混合自适应问卷与规则候选垂直切片进行中；P2-01 食物字典与 schema 完成（15/50），P2-02 确定性规则引擎 [>] 进行中。  
-> 注意：本文件记录”事实、已确认决策、建议和待定项”，不能把 Codex 建议误写成用户已经确认的结论。
+> 状态：P2 混合自适应问卷与规则候选垂直切片；P2-01 食物字典与 schema 完成（15/50），P2-02 规则引擎（16/50）完成，P2-03 状态机（17/50）完成；下一步切换为 P2-03A Questionnaire Decision Engine 与 next API（待用户确认）。  
+> 注意：本文件记录"事实、已确认决策、建议和待定项"，不能把 Codex 建议误写成用户已经确认的结论。
 
 ## 1. 恢复上下文时先读什么
 
@@ -33,13 +33,11 @@
 - 项目名：EatWhat。
 - 形态：响应式 Web 优先，兼容移动端和桌面端。
 - 当前目录：`D:\A622\项目\AgentWork\project0717`（2026-08-03 复制后的工作区；原路径 `D:\A622\项目\project0717` 仍存在，两处内容一致）。
-- 当前仓库事实：已有 `docs/`、`prototype/eatwhat-p0/` 可点击原型，以及 `frontend/`（React/Vite/TS 前端壳）和 `backend/`（FastAPI 后端壳）。截至 2026-08-04 已在本工作区 `git init`（main 分支），现有 11 个提交；GitHub 远端 `https://github.com/Shenhaihub/eatwhat`（private）已建立并同步；origin/main 与本地完全一致；CI 连续 3 次实跑全绿。P2-01 交付物已入库：
-  - `backend/app/schemas/enums.py` + `food.py`：枚举/问卷答案/食物字典/推荐候选/校验器/入口意图；
-  - `backend/app/data/food_dictionary_v1.0.json`：15 条启用字典；
-  - `backend/app/repositories/food_dictionary.py`：内存只读仓库（加载即校验，加载失败在启动时暴露）；
-  - `backend/tests/test_food_dictionary.py`：37 用例（新增 22）；
-  - `frontend/src/services/api/types/`：enums/food/index 三件套，1:1 后端。
-- 当前阶段：P0（产品/原型/技术文档收敛）已完成；P1（工程骨架）已完成（14/50）；P2 混合自适应问卷与规则候选垂直切片（P2-01 完成 15/50，P2-02 规则引擎进行中）。尚未接入规则引擎、问卷状态机、数据库、认证、AI、地图与业务功能；不能称为"产品功能已开发"。
+- 当前仓库事实：已有 `docs/`、`prototype/eatwhat-p0/` 可点击原型，以及 `frontend/`（React/Vite/TS 前端壳）和 `backend/`（FastAPI 后端壳）。截至 2026-08-04 已在本工作区 `git init`（main 分支），现有 13 个提交；GitHub 远端 `https://github.com/Shenhaihub/eatwhat`（private）已建立并同步；origin/main 与本地完全一致；CI 连续 5 次实跑全绿。P2 交付物已入库：
+  - **P2-01**：`backend/app/schemas/enums.py` + `food.py`（枚举/问卷答案/食物字典/推荐候选/校验器/入口意图）；`backend/app/data/food_dictionary_v1.0.json`（15 条启用字典）；`backend/app/repositories/food_dictionary.py`（内存只读仓库，加载即校验）；`backend/tests/test_food_dictionary.py`（37 用例）；`frontend/src/services/api/types/`（enums/food/index 三件套，1:1 后端）。
+  - **P2-02**：`backend/app/services/rule_engine.py`（规则引擎，正好 5 条候选 + 稳定排序 + G-08 不空 + G-12 差异化）；`backend/tests/test_rule_engine.py`（21 用例）。
+  - **P2-03**：`backend/app/data/question_bank_v1.0.json`（6 题 3 基 3 自适应，G-11 不询问医学过敏原）；`backend/app/schemas/questionnaire.py`（9 件 schema，全部 extra=forbid）；`backend/app/services/questionnaire_state.py`（状态机：load_question_bank / recompute_questionnaire / draft round-trip 三件套，纯函数，无账号/DB 依赖，未登录可完成）；`backend/tests/test_questionnaire_state.py`（12 用例：完整性/修改早期答案失效/草稿/稳定输出/加载校验）。
+- 当前阶段：P0（产品/原型/技术文档收敛）已完成；P1（工程骨架）已完成（14/50）；P2 混合自适应问卷与规则候选垂直切片（P2-01 完成 15/50，P2-02 完成 16/50，P2-03 完成 17/50）。尚未接入 next API、数据库、认证、AI、地图与业务功能；不能称为"产品功能已开发"。
 - 用户背景：Python 有基础，但整体仍是全栈初学者；主要使用 Windows，希望依赖 Codex 逐步完成第一个完整项目。
 - 项目双重目标：做出真实可用的产品，同时形成结构完整、可以展示工程能力的 GitHub 作品。
 
@@ -571,3 +569,47 @@ P1-01~P2-01 已完成（15/50）；提交链：`8248b5f → 846bee1 → d1dfdba 
   - P2-03A 路由层（questionnaire/next）必须先加一条测试：如果请求体传了非空 source_type，接口返回 400——守住 G-07，不允许客户端直接指派来源。
   - P5 接 AI：必须保留"≥4 组不同答案→不同排序/首候选"的参数化测试，模型层不能退回到恒固定；同时 AI 返回的结构必须也满足"每条推荐≥1 个可追溯信号"，如果模型无法产出结构化信号，必须走降级回 rule。
 - 下一次继续：P2-03 基础题与自适应预设题状态机（先问题库/条件表定稿→再 P2-03A HTTP 化）。
+
+### 2026-08-04 — MEM-026（P2-03 关闭：基础题与自适应预设题状态机 v1.0 + 6 题版本库 + 七维覆盖模型）
+
+- 交付件：
+  - `backend/app/data/question_bank_v1.0.json`：6 题。基础 3 = Q01 餐段（5 选 1，映射 meal_period，display_if=null，required_for 所有 recommend 入口）/ Q02 明确偏好（8 选 1，映射 explicit_food_preference）/ Q03 预算（3 选 1，映射 budget）；自适应 3 = Q04 口味（7 选多，映射 tastes，display_if=null）/ Q05 忌口（7 选多，映射 avoidances，display_if=null，7 项全部为 Avoidance 枚举的一般忌口，**不包含医学 allergens——严格遵守 G-11**）/ Q06 食量（5 选 1，映射 appetite，display_if=Q01∈{lunch,dinner,midnight_snack}）。
+  - `backend/app/schemas/questionnaire.py`：9 件模型。`QuestionOption`（option_id 正则 ^[a-z0-9_]{2,32}$；option_text≤32）；`DimensionMapping`（布尔 7 维，medical_allergens 恒为 false，G-11）；`DisplayCondition`（field + op=equals_any + values）；`QuestionBankItem` + `QuestionBankV1`（启动校验 5 条：question_id 唯一 / display_if 引用合法 / option_id 唯一 / maps_to 非空 / required_for 入口合法）；`DimensionCoverage`（7 维 covered + covered_count/required_count）；`QuestionnaireRecomputeResult`（9 字段）；`QuestionnaireDraftV1` + `draft_from_dict` / `draft_to_dict`（纯数据 round-trip，兼容 localStorage JSON 序列化）。全部 `extra="forbid"`。
+  - `backend/app/services/questionnaire_state.py`：三件套。`load_question_bank()`：启动一次性加载 JSON + 5 条硬校验；**坏 display_if 引用在加载阶段就 ValueError，不留到请求时**。`recompute_questionnaire(*, bank, entry_intent, answers_by_question_id)`：每次调用从头 8 步确定性重算（校验 entry → 评估 display_if → 校验 option 合法 → 单选项计数 → valid vs invalidated 分离 → 七维覆盖检测 → 完整度判断 → next 生成）；**不依赖任何账号/DB/缓存/全局状态**，天然支持未登录完成前置问卷。草稿三件套 `QuestionnaireDraftV1` + from_dict / to_dict 纯数据 round-trip，无隐藏语义。
+  - `backend/tests/test_questionnaire_state.py`：12 用例。TestBankIntegrity（4 条：ID 唯一/加载合法/display_if 引用非法抛 ValueError/入口意图合法集合）；TestAIRecommendEntryPath（3 条：逐步完成 progress 20→40→60→80→100 / 完成态 6 维 covered / community_share 入口立即 complete 100 空 next）；TestModifyEarlyAnswerInvalidatesLater（1 条：Q1=lunch→Q6 答→改 Q1=afternoon_tea→Q6 进 invalidated 且 appetite.covered=false，progress 100→60）；TestDraftRoundtrip（2 条：AI recommend 草稿 round-trip 恒等 / 未知 entry_intent 在 recompute 阶段抛 ValueError，不在 draft_from_dict 阶段拦截——保持序列化层宽容、业务层严格）；TestDeterministic（1 条：同输入同结果，model_dump json 恒等）；TestUnknownEntryIntent（1 条：未知 entry_intent 启动时 ValueError）。
+- 设计口径（供 P2-03A HTTP 化对齐用）：
+  - **七维覆盖判定规则**（任何入口都用同一套，不造新字段）：
+    - `meal_period.covered` = valid 答了 q01_meal_period 且 option 非空
+    - `explicit_food_preference.covered` = valid 答了 q02 且非空
+    - `budget.covered` = valid 答了 q03 且非空
+    - `tastes.covered` = valid 答了 q04 **且 len ≥ 1**（空多选视为"未覆盖"，允许跳过）
+    - `avoidances.covered` = valid 答了 q05 **且 len ≥ 1**
+    - `appetite.covered` = q06 active 时 valid 且非空；q06 不 active 时 covered=true（不需要问这个维度就视为自然覆盖）
+    - `medical_allergens.covered` = **永远 true + never 问**（G-11 边界，七维"名义完整"的占位维度，schema/maps_to/display_if 在 v1.0 里都不碰它）
+  - **完整度判断**（P2-03A 路由要复用同一语义）：
+    - 非 recommend 入口（community_share/activity/user_choice）：is_complete=true，progress=100，next_questions=[]
+    - ai_recommend 入口：required_set = {meal_period, explicit_food_preference, budget}；只有三者全部 covered 才 is_complete=true，progress 计算取 round(required 中 covered / required_count * 100)，其它自适应维度不计入 required（影响 covered，但不影响 complete 判定）
+  - **invalidated 判定**（严格"答过且现在不 active 就算失效"，不做更复杂的"语义仍然相关保留"——避免非确定性）：
+    - `invalidated = answer_qid ∉ active_question_ids`，只要 display_if 现在不成立且之前答过，一律放到 invalidated 里不计入 valid 和 covered，让后续题在下次操作里自动回到"未答"状态
+  - **required_for_entry_intents 语义**：仅用于启动校验（列出的入口意图必须合法）；完整度判定仍用上面的 required_set 规则，后续加题可以改 required_for 但不改代码。
+- **对 G-01~G-16 的口径对齐确认**（P2-03 自查结果，P2-03A/后续必须一致，不能悄悄偏离）：
+  - G-07 source_type 服务端派生：本步尚未接 HTTP 路由，schema 层所有入参均不含 source_type；P2-03A 路由测试必须加"请求体带 source_type 则 400"——严格 G-07。
+  - G-08 不空规则候选：本步状态机不产生候选，G-08 仍由 P2-02 rule_engine 兜底。
+  - G-09 字段长度：QuestionBankItem.title_zh≤64、QuestionOption.text≤32、Dimension signal_key≤40（在 schema 层 max_length= 强制，不允许超）。
+  - G-10 / G-11 医学边界：状态机/问题库/校验器**绝不询问医学过敏原**；QuestionnaireAnswers.medical_allergens 仅保留为 G-11 占位"从不下发到预设题"的字段。
+  - G-12 信息可追溯：推荐层的 G-12 已由 P2-02 保证；本步的七维覆盖模型对每条回答的来源 qid→维度 1:1 映射，后续端到端的"信号可追溯"可由 qid / option_id 直接回溯。
+  - G-13 未登录可用：**本步全部纯函数，零账号/DB 依赖**，草稿直接走 localStorage，完全满足 G-13。
+  - G-14 分享不可溯源：本步不涉及分享，分享链路在 P3+。
+  - G-15 登录仅在 AI 调用前要求：本步不接 AI，状态机本身完全匿名；P2-03A/后续接 AI 前要登录——这是 P2-05 的验收。
+- 已关闭的验收点（对应 P2-03 计划清单 + P2-03 文档 6 类验收）：
+  1. 基础 3 + 自适应 3 = 6 题；条件选择通过 display_if，实测 Q6 仅在午餐/晚餐/宵夜出现。
+  2. 修改早期答案使后续答案失效：TestModifyEarlyAnswerInvalidatesLater 实锤 Q6 进 invalidated。
+  3. 任何路径不遗漏必要维度：required_set={餐段/明确偏好/预算}三题是 recommend 入口硬要求，缺任何一个都不 complete。
+  4. 草稿保存/恢复/重置：TestDraftRoundtrip 实锤 1:1 round-trip。
+  5. 未登录可完成前置问卷：纯函数三件套 + 无 DB/账号依赖，满足。
+  6. 加载校验：question_id 唯一 / display_if 引用合法 / 入口意图合法——全部在 load_question_bank 和 recompute 阶段拦截。
+- 对后续的输入约束：
+  - P2-03A（HTTP 化）的 `/api/v1/questionnaire/next` 返回体必须直接用 `QuestionnaireRecomputeResult`，不要另造一套 field；9 字段 1:1 暴露，前端不用猜。
+  - P2-03A 新增测试：请求体传了 `source_type` 必须 400（守住 G-07，对应 MEM-025 的约束）；`entry_intent` 非法值 `bogus_entry` 必须 422/400（状态机 recompute 会抛 ValueError，路由层要统一转成 HTTP 错误码）。
+  - P2-04（推荐展示）若要串起状态机→规则引擎，只需要在 answers_complete=true 时把 valid_answered_question_ids 对应的答案转成 QuestionnaireAnswers（注意把空多选的 tastes/avoidances 转 None 而不是 []，rule_engine 里对 None 走默认），然后调用 generate_rule_recommendations 即可——后端纯函数链路已打通，只差 20 行胶水代码。
+- 下一次继续：P2-03A Questionnaire Decision Engine 与 next API（FastAPI 路由包装状态机 + 正例负例 HTTP 测试）；完成后直接接 P2-04 核心切片验收（状态机→规则→5 条候选端到端跑通 5 组差异化答案，保持 MEM-024 反小碗菜恒第一）。

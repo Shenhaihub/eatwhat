@@ -215,19 +215,27 @@ def recompute_questionnaire(
         progress_pct = 100
     progress_pct = max(0, min(100, progress_pct))
 
-    # Step 7. is_complete + completion_reason
+    # Step 7. is_complete + completion_reason + next_action（P2-03A 清单硬性要求的下一步指引）
     if not required_set:
         # community / activity / user_choice 入口：问卷不是必经
         is_complete = True
         completion_reason: Any = "entry_intent_no_questionnaire_required"
+        next_action: Any = "redirect_no_questionnaire_required"
     elif not required_missing:
         is_complete = True
         completion_reason = "all_required_answered"
+        # entry=ai_recommend 时完整后允许去生成推荐；其余入口兜底为 redirect（虽然理论上其余入口都走上面 not required_set）
+        if entry_intent == "ai_recommend":
+            next_action = "proceed_generate_recommendations"
+        else:
+            next_action = "redirect_no_questionnaire_required"
     else:
         is_complete = False
         completion_reason = "not_complete"
+        next_action = "proceed_questionnaire"
 
-    # Step 8. next_question_ids：按问题库原始顺序，取"active 且 未有效回答 且 required 优先"的前 2 题
+    # Step 8. next_question_ids & next_questions：按问题库原始顺序，
+    # 取"active 且 未有效回答 且 required 优先"的前 2 题；同时返回题对象（前端无需二次查）
     next_ids: list[str] = []
     missing_ids_ordered = [qid for qid in required_qids if qid in required_missing]
     for qid in missing_ids_ordered:
@@ -248,16 +256,27 @@ def recompute_questionnaire(
                 next_ids.append(qid)
                 if len(next_ids) >= 2:
                     break
+    next_questions_items: list[Any] = [
+        questions_by_id[qid] for qid in next_ids if qid in questions_by_id
+    ]
+
+    # 兼容字段赋值：保持 P2-03 阶段已有调用方的老字段名值恒等。
+    progress_val = progress_pct
+    invalidated_val = invalidated
 
     return QuestionnaireRecomputeResult(
         questionnaire_version=bank.questionnaire_version,
+        next_questions=next_questions_items,
         next_question_ids=next_ids,
-        invalidated_answer_question_ids=invalidated,
+        invalidated_answer_ids=invalidated_val,
+        invalidated_answer_question_ids=invalidated_val,
         is_complete=is_complete,
-        progress_pct=progress_pct,
+        progress=progress_val,
+        progress_pct=progress_val,
         covered_dimensions=covered_dimensions,
         completion_reason=completion_reason,
         required_not_yet_answered_question_ids=required_missing,
+        next_action=next_action,
     )
 
 

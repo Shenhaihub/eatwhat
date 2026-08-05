@@ -3,9 +3,9 @@
 > 这是项目后续执行的唯一实时计划清单。  
 > 最后更新：2026-08-04  
 > 当前阶段：P1 工程骨架完成，进入 P2 混合自适应问卷与规则候选垂直切片  
-> 当前任务：P2-02 已完成（16/50）—— 确定性规则引擎 v1.0（正好 5 条 + 稳定输出 + G-08 不空 + G-12/MEM-024 反"小碗菜固定第一" 5 组参数化通过），后端 58 单测全绿、前端 lint/typecheck/test(8)/build 全绿、GitHub CI 连续 5 次通过；当前推进 P2-03 基础题与自适应预设题状态机  
-> 清单进度：**16/50 已完成，1 项进行中（P2-03 状态机），33 项待开始**  
-> 工程状态：已 `git init`（main 分支，12 个提交；GitHub 远端 Shenhaihub/eatwhat@private，5 次 CI 连续全绿）；frontend 完整前端壳；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ schema/枚举/加载器/37 测试 + P2-02 规则引擎服务/21 测试；前端 1:1 TS 类型；尚未接入问卷状态机、next API、数据库、认证、AI、地图与业务功能
+> 当前任务：P2-03 已完成（17/50）—— 基础题与自适应预设题状态机 v1.0（6 题 3 基 3 自适应 + DAG 重算 + 答案失效 + 草稿 round-trip + 12 单测）；后端 70 单测全绿、前端 lint/typecheck/test(8)/build 全绿、提交 459f60e 推至 main；当前推进 P2-03A Questionnaire Decision Engine 与 next API  
+> 清单进度：**17/50 已完成，0 项进行中，33 项待开始**（下一步唯一主任务切换为 P2-03A，待用户确认）  
+> 工程状态：已 `git init`（main 分支，13 个提交；GitHub 远端 Shenhaihub/eatwhat@private，5 次 CI 连续全绿）；frontend 完整前端壳；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ schema/枚举/加载器/37 测试 + P2-02 规则引擎/21 测试 + P2-03 问题库 v1.0/状态机/12 测试；前端 1:1 TS 类型；尚未接入 next API、数据库、认证、AI、地图与业务功能
 
 ## 1. 使用规则
 
@@ -215,10 +215,12 @@
     - [x] 全部门禁：后端 ruff/mypy/pytest(58) 全绿；前端 oxlint/tsc/vitest(8)/vite build 全绿；提交 `efe1a58` → push → **GitHub Actions Run 5 全绿 31s**（第 5 次连续通过）。
   - 提交：`efe1a58`。
 
-- [>] **P2-03 实现基础题与自适应预设题状态机**
+- [x] **P2-03 实现基础题与自适应预设题状态机**
   - 依赖：P2-01、P2-02。
+  - 完成：2026-08-04。
   - 预期成果：基础 2–3 题、后续 2–3 题的选择条件、七个信息维度覆盖检查、校验、进度、返回修改、草稿保存与重新开始。
-  - 验收：未登录可完成前置问卷；修改早期答案会使不再适用的后续答案失效并重新选题；任何路径都不会遗漏必要维度。
+  - 交付：问题库 v1.0（6 题）+ questionnaire schema 9 件 + 状态机服务 + 12 单测。
+  - 验收：未登录可完成前置问卷；修改早期答案会使不再适用的后续答案失效并重新选题；任何路径都不会遗漏必要维度（3 大验收 + 草稿 + 稳定输出 + 非法引用全通过）。
 
 - [ ] **P2-03A 实现 Questionnaire Decision Engine 与 next API**
   - 设计：使用版本化问题库、条件表和允许操作符构成决策图/DAG；不要把分支写成散落在代码中的深层 if/else，也不要执行配置中的任意表达式。
@@ -650,14 +652,36 @@
   - P2-03A 的 `POST /api/v1/questionnaire/next` 完成后，前端拿到 answers_complete=true 时，直接把完整 answers 调 `generate_rule_recommendations` 就是 P2-04 的 5 条候选展示——后端已经把调用链打通，只差一层 FastAPI 路由包装。
   - P5 接 AI 时，`generation_mode=ai` 但 G-12 依然要过（同样需要 4 组以上的差异化参数化测试），不能因为接了 AI 就放松 MEM-024。
 
+### 2026-08-04 — PLAN-025（P2-03 完成 ✓ 17/50，基础题与自适应预设题状态机 v1.0，问卷→规则调用链后端已打通）
+
+- 状态：P2-03 完成 ✓（17/50）。P2 核心垂直切片继续推进；下一步唯一主任务切换为 **P2-03A 实现 Questionnaire Decision Engine 与 next API**（把当前纯函数服务包成 FastAPI HTTP 路由供前端调用；`answers_complete=true` 之后再直连规则引擎生成 5 条候选即 P2-04 主链路雏形），待用户确认是否开始。
+- 做了什么：
+  1. **问题库 v1.0**：新增 `backend/app/data/question_bank_v1.0.json`，共 6 题——基础 3（Q01 餐段 5 选 1 / Q02 明确食物偏好 8 选 1 / Q03 预算 3 选 1），自适应 3（Q04 口味 7 选多 / Q05 忌口 7 选多 / Q06 食量 5 选 1）。每题含 question_id/title/options/maps_to/display_if/required_for_entry_intents；**G-11 医学边界严格遵守：不询问医学过敏原**，只在 Q05 收集"一般忌口"（NO_MEAT/NO_FISH/SPICY_AVOID 等 7 项——全部是 Avoidance 枚举值，不含医疗级过敏原）。
+  2. **schema 9 件**：新增 `backend/app/schemas/questionnaire.py`，`QuestionOption`（option_id 正则 + 最多 64 字）/ `DimensionMapping`（布尔 7 维：meal_period/explicit_food_preference/budget/tastes/avoidances/appetite/medical_allergens——**medical_allergens 永远为 false，G-11 边界**）/ `DisplayCondition`（field + op + values，只支持 equals_any）/ `QuestionBankItem` / `QuestionBankV1`（带 5 字段启动校验：question_id 唯一、display_if 引用合法、option_id 唯一、maps_to 非空、required_for_entry_intents 集合合法）/ `DimensionCoverage`（7 维布尔 + covered_count + required_count）/ `QuestionnaireRecomputeResult`（9 字段：entry_intent/questionnaire_version/is_complete/progress/active_question_ids/next_questions/valid_answered_question_ids/invalidated_answer_question_ids/covered_dimensions）/ `QuestionnaireDraftV1` 三件套（`draft_to_dict` + `draft_from_dict` 纯数据 round-trip，支持 localStorage 序列化），全部 `extra="forbid"`。
+  3. **状态机服务**：新增 `backend/app/services/questionnaire_state.py`。主入口：
+     - `load_question_bank()`：启动时一次性加载 JSON 并跑 5 条硬校验（**坏 display_if 引用在加载阶段就抛 ValueError，不留到请求时**）。
+     - `recompute_questionnaire(*, bank, entry_intent, answers_by_question_id)`：**每次调用从头确定性重算**——Step 1 校验 entry_intent → Step 2 评估 display_if 得到 active → Step 3 校验 option_id 合法 → Step 4 单选项最多 1 个 + 选项非空 → Step 5 valid vs invalidated 分离（不再 active 的题只要答过就全部进 invalidated，保证"修改早期答案→后续作废"）→ Step 6 七维覆盖检测（含"答了等于没答"的空多选视为未覆盖）→ Step 7 完整度判断（非 recommend 入口立即 complete/progress=100，AI recommend 入口必答 Q1/Q2/Q3）→ Step 8 next_questions 生成（非 recommend 空数组，recommend 取首个未答 active）。**不依赖任何账号/DB/缓存，纯函数，天然支持未登录完成前置问卷**。
+  4. **关键验收硬过线（TestModifyEarlyAnswerInvalidatesLater）**：Q1=lunch → 答 Q6(食量 normal) → 此时 is_complete=true、appetite.covered=true。再改 Q1=afternoon_tea（下午茶）→ Q6 display_if（要求 lunch/dinner/midnight_snack）不成立 → Q6 进入 `invalidated_answer_question_ids`，且 appetite.covered 自动切换为 false，progress 从 100 回落为 60。
+  5. **其它单测覆盖**：TestBankIntegrity（加载校验 3 条 + 入口意图合法 1 条）/ TestAIRecommendEntryPath（3 条：逐步答完 progress 递增 / 完成态 / 非 recommend 入口立即 complete）/ TestDraftRoundtrip（1 条 + 未知 entry_intent 在 recompute 阶段拦截）/ TestDeterministic（1 条：同输入稳定输出）。合计 **12 新单测**。
+  6. **全部门禁 + 交付**：后端 ruff/mypy 0 报错；pytest 37(P2-01) + 21(P2-02) + 12(P2-03) = **70 全绿**；前端 oxlint/tsc/vitest(8)/vite build 全绿；提交 `459f60e`，4 files changed 778 insertions，main → main push 成功。
+- 注意事项：
+  - **G-09 字段长度遵守**：title_zh 最多 64 字、option text 最多 32 字、signal key 最多 40 字、reason summary 最多 160 字——在 schema 层 `max_length=` 强制，不允许超。
+  - **display_if 语义**：Q04/Q05 永远显示（display_if=null）；Q06 只在 lunch/dinner/midnight_snack 显示（下午茶/早餐不吃"食量"题）。后续加题只要 display_if 引用的 question_id/option_id 在库里存在，就不会把坏配置带进运行时。
+  - **入口意图处理**：`ai_recommend` 走完整问卷路径；`community_share`/`activity`/`user_choice` 三入口返回"空问卷、立即 complete"——推荐侧由 D-001 分支决定是否跳过（社区/活动/手动自选本来就不进前置问卷）。
+- 对后续的影响：
+  - P2-03A 只需要写一层 FastAPI 路由：`POST /api/v1/questionnaire/next` 调 `load_question_bank + recompute_questionnaire`；`POST /api/v1/questionnaire/recommend`（或在 P2-04 做）当 is_complete 时把 valid_answered 转 QuestionnaireAnswers 直接喂 `generate_rule_recommendations`——**后端纯函数链路已经完全就位，只差 HTTP 壳**。
+  - 草稿序列化：`QuestionnaireDraftV1` 与 `draft_from_dict/draft_to_dict` 格式已焊死，前端直接把 JSON 存 localStorage 即可，不必等后端 API 写草稿。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. P2-02 已完成（16/50）：确定性规则引擎 v1.0 + 21 新单测（合计 58）全绿 + GitHub CI 连续 5 次通过（Run 5 `efe1a58` 31s）。当前主任务切换为 **P2-03 实现基础题与自适应预设题状态机**，核心验收点：
-   - 基础 2–3 题 + 后续 2–3 题的条件选择，覆盖入口意图决定的七维完整度
-   - 修改早期答案 → 失效答案 ID 返回 + 重算后续路径
-   - 草稿保存/恢复/重置；未登录本地完成前置问卷
-4. P2-03A 是 P2-03 的 HTTP 化（POST /api/v1/questionnaire/next，每次重算确定性 DAG，禁止 AI），依赖 P2-03 状态模型先定稿。
-5. P0-06 推迟的真人理解数据、工程后流程风险，均作为工程后复测项，不伪造完成。
-6. 每次开始实质工程步骤前，对照 `22_EatWhat_P0-07_技术文档收敛清单_v1.0.md` 的 G-01~G-16 校验实现口径；对 G-12 及 MEM-024（反"固定首候选小碗菜"）做强化盯防——任何推荐生成路径都必须附带 ≥4 组不同答案组合产生不同排序/首候选的参数化测试。
+3. P2-03 已完成（17/50）：问题库 v1.0 6 题 + 状态机服务 + 12 新单测（合计 70）全绿 + 提交 `459f60e` push 成功。当前主任务切换为 **P2-03A 实现 Questionnaire Decision Engine 与 next API**，核心验收点：
+   - `POST /api/v1/questionnaire/next`：接收 questionnaire_version+entry_intent+answers_so_far，每次从头重算，返回 RecomputeResult 9 字段
+   - 相同版本和答案得到相同路径；修改早期答案能返回失效答案 ID
+   - 条件循环 / 未知问题 / 未知选项 在加载或请求时失败；接口不调用 AI
+   - 非 recommend 入口立即 answers_complete=true；recommend 入口完整后 answers_complete=true，此时把 answers 转 QuestionnaireAnswers 喂 generate_rule_recommendations 就能产出 5 条候选（已验证）
+   - 后端新增 `test_api_questionnaire_next.py`，模拟 HTTP 请求走正例/负例
+4. 全部门禁一条都不能少：`backend: ruff + mypy + pytest` 和 `frontend: oxlint + tsc + vitest + vite build`，必须全部 0 报错，再 git commit+push。
+5. 全量门禁通过后必须同步本 PLAN（清单项状态 + 执行日志 PLAN-026）+ 项目记忆 MEM-027。
+6. MEM-024 反"固定首候选"盯防延续到 P2-03A/P2-04：端到端（填答案 → 后端 next 完成 → 推荐 5 条）至少跑 5 组差异化答案，要求 Top5 排序 ≥4 种、首候选 ≠ xiaowan_cai ≥2 组，不能因为状态机多了一层就放松差异化。
