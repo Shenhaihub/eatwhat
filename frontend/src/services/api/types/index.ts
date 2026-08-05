@@ -44,3 +44,10 @@ export {
   type QuestionnaireNextRequestV1,
   type QuestionnaireRecomputeResult,
 } from './questionnaire';
+export {
+  DICTIONARY_VERSION_PATTERN,
+  QUESTIONNAIRE_VERSION_PATTERN,
+  RECOMMENDATIONS_SUPPORTED_ENTRY_INTENTS,
+  type RecommendationsGenerateRequestV1,
+  type RecommendationsGenerateResponseV1,
+} from './recommendations';

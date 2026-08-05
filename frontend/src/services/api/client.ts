@@ -8,6 +8,8 @@
 import type {
   QuestionnaireNextRequestV1,
   QuestionnaireRecomputeResult,
+  RecommendationsGenerateRequestV1,
+  RecommendationsGenerateResponseV1,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
@@ -107,5 +109,20 @@ export const api = {
     options?: Omit<RequestOptions, 'method' | 'body'>,
   ): Promise<QuestionnaireRecomputeResult> {
     return api.post<QuestionnaireRecomputeResult>('/questionnaire/next', request, options);
+  },
+
+  // -------- 推荐生成 --------
+  /**
+   * P2-04：POST /recommendations
+   * 把问卷完成态的 answers_by_question_id + questionnaire_version 直接提交，
+   * 服务端：加载题库 → 映射到七维 → 规则引擎确定性输出 5 条（G-08：任何合法输入都返回正好 5）。
+   *
+   * 注意：G-07 禁止在请求体任何层级传 source_type；source_type=ai_recommended 由后端派生。
+   */
+  recommendationsGenerate(
+    request: RecommendationsGenerateRequestV1,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<RecommendationsGenerateResponseV1> {
+    return api.post<RecommendationsGenerateResponseV1>('/recommendations', request, options);
   },
 };

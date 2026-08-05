@@ -1,0 +1,112 @@
+/*
+ * P2-04 补充：推荐结果卡片样式
+ * 与问卷页 questionnaire-page 壳子复用同一套 design tokens
+ */
+
+.recommendations-list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.recommendation-card {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.recommendation-card[data-priority='1'] {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-primary) 35%, var(--color-border)),
+    0 10px 30px color-mix(in oklab, var(--color-primary) 12%, transparent);
+}
+
+.recommendation-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.recommendation-rank {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--color-primary);
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-primary) 12%, var(--color-surface));
+  border: 1px solid color-mix(in oklab, var(--color-primary) 40%, var(--color-border));
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.recommendation-name {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-text);
+  flex: 1 1 auto;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.tag-budget-fits {
+  color: #14753e;
+  border-color: color-mix(in oklab, #14753e 40%, var(--color-border));
+  background: color-mix(in oklab, #14753e 10%, var(--color-surface));
+}
+
+.tag-budget-uncertain {
+  color: var(--color-text-muted);
+}
+
+.tag-budget-unlikely {
+  color: #a21d1d;
+  border-color: color-mix(in oklab, #a21d1d 40%, var(--color-border));
+  background: color-mix(in oklab, #a21d1d 8%, var(--color-surface));
+}
+
+.recommendation-summary {
+  margin: 0;
+  color: var(--color-text);
+  line-height: 1.6;
+}
+
+.recommendation-signals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.signal-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.budget-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-text-muted);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: color-mix(in oklab, var(--color-text-muted) 8%, var(--color-surface));
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
