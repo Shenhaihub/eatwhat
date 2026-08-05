@@ -5,6 +5,11 @@
  * - P2 起在此之上补充认证头、幂等键与业务请求。
  */
 
+import type {
+  QuestionnaireNextRequestV1,
+  QuestionnaireRecomputeResult,
+} from './types';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
 
 interface ApiErrorBody {
@@ -88,5 +93,19 @@ export const api = {
     options?: Omit<RequestOptions, 'method' | 'body'>,
   ): Promise<T> {
     return requestJson<T>(path, { ...options, method: 'PATCH', body });
+  },
+
+  // -------- 问卷决策 --------
+  /**
+   * P2-03B：POST /questionnaire/next
+   * 调用问卷决策状态机，返回 next_questions / invalidated_answer_ids / is_complete / progress / covered_dimensions / next_action。
+   *
+   * 注意：G-07 调用方绝对不要在 body 里塞 source_type，会被后端 400 拒绝。
+   */
+  questionnaireNext(
+    request: QuestionnaireNextRequestV1,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<QuestionnaireRecomputeResult> {
+    return api.post<QuestionnaireRecomputeResult>('/questionnaire/next', request, options);
   },
 };

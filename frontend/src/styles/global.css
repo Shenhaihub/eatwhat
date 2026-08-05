@@ -281,3 +281,195 @@ button {
     scroll-behavior: auto !important;
   }
 }
+
+/* --- 问卷页（/recommend） P2-03B 专用样式 --- */
+.questionnaire-page {
+  max-width: 680px;
+}
+
+.questionnaire-page .eyebrow {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-bottom: var(--space-2);
+}
+
+.progress-shell {
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+  font-size: 0.9rem;
+}
+
+.progress-num {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
+  transition: width 0.2s ease;
+}
+
+.dim-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.dim-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px var(--space-2);
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  font-size: 0.8rem;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+}
+
+.dim-tag em {
+  font-style: normal;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.dim-tag.is-covered {
+  background: color-mix(in oklab, var(--color-primary) 12%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-primary) 40%, var(--color-border));
+  color: var(--color-text);
+}
+
+.dim-tag.is-covered em {
+  color: var(--color-primary);
+}
+
+.questionnaire-form {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.error-notice {
+  border-color: color-mix(in oklab, #c00 40%, var(--color-border));
+  background: color-mix(in oklab, #f66 8%, var(--color-surface));
+}
+
+.q-card {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.q-card legend {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+}
+
+.q-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.q-required {
+  color: #c0392b;
+  margin-left: 6px;
+  font-weight: 700;
+}
+
+.q-hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.q-options {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.q-options.single_choice {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+
+.q-options.multi_choice {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+.q-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: transform 0.05s ease, background 0.1s ease, border-color 0.1s ease;
+}
+
+.q-option:hover {
+  background: var(--color-surface-muted);
+  border-color: color-mix(in oklab, var(--color-primary) 30%, var(--color-border));
+}
+
+.q-option.is-selected {
+  border-color: var(--color-primary);
+  background: color-mix(in oklab, var(--color-primary) 14%, var(--color-surface));
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.q-option:active {
+  transform: translateY(1px);
+}
+
+.q-option-label {
+  pointer-events: none;
+}
+
+.loading-row {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-primary) 8%, var(--color-surface));
+  color: var(--color-primary);
+  font-size: 0.9rem;
+}
+
+.q-footer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--color-border);
+}
+
+.q-footer-hint {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}

@@ -27,3 +27,20 @@ export {
   type RecommendationItem,
   type RecommendationReason,
 } from './food';
+export {
+  ENTRY_INTENT_VALUES,
+  isValidEntryIntent,
+  type CompletionReason,
+  type DimensionCoverage,
+  type DimensionMapping,
+  type DisplayCondition,
+  type DisplayConditionOperator,
+  type EntryIntent,
+  type MappableDimensionField,
+  type NextAction,
+  type QuestionBankItem,
+  type QuestionOption,
+  type QuestionType,
+  type QuestionnaireNextRequestV1,
+  type QuestionnaireRecomputeResult,
+} from './questionnaire';
