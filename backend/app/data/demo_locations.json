@@ -1,0 +1,44 @@
+{
+  "locations": [
+    {
+      "code": "wuhan_optics_valley",
+      "display_name": "光谷广场",
+      "city_name": "武汉市",
+      "district_name": "洪山区",
+      "lat_gcj02": 30.5017,
+      "lng_gcj02": 114.3992
+    },
+    {
+      "code": "wuhan_jianghan_road",
+      "display_name": "江汉路步行街",
+      "city_name": "武汉市",
+      "district_name": "江汉区",
+      "lat_gcj02": 30.5810,
+      "lng_gcj02": 114.2870
+    },
+    {
+      "code": "wuhan_chuhe_hanjie",
+      "display_name": "楚河汉街",
+      "city_name": "武汉市",
+      "district_name": "武昌区",
+      "lat_gcj02": 30.5547,
+      "lng_gcj02": 114.3535
+    },
+    {
+      "code": "wuhan_jiedaokou",
+      "display_name": "街道口",
+      "city_name": "武汉市",
+      "district_name": "洪山区",
+      "lat_gcj02": 30.5240,
+      "lng_gcj02": 114.3490
+    },
+    {
+      "code": "wuhan_university_of_technology",
+      "display_name": "武汉理工大学马房山校区",
+      "city_name": "武汉市",
+      "district_name": "洪山区",
+      "lat_gcj02": 30.5150,
+      "lng_gcj02": 114.3500
+    }
+  ]
+}

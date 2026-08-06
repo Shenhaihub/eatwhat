@@ -51,3 +51,23 @@ export {
   type RecommendationsGenerateRequestV1,
   type RecommendationsGenerateResponseV1,
 } from './recommendations';
+export {
+  type DemoLocationItem,
+  type DemoLocationListResponse,
+  type DemoLocationSelectResponse,
+  type LocationReverseRequestV1,
+  type LocationReverseResponseV1,
+  type LocationSearchRequestV1,
+  type LocationSearchResponseV1,
+  type LocationSource,
+  type LocationTokenInfo,
+} from './location';
+export {
+  type MockMode,
+  type POIItem,
+  type POIProviderName,
+  type RestaurantSearchMeta,
+  type RestaurantSearchRequestV1,
+  type RestaurantSearchResponseV1,
+  type RestaurantSearchSuggestion,
+} from './poi';

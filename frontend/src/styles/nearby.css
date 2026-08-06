@@ -1,0 +1,347 @@
+/*
+ * P3-01：地点选择页样式
+ * 复用 questionnaire-page 的 design tokens 与 q-card / q-option 组件
+ */
+
+.nearby-page {
+  max-width: 680px;
+}
+
+.nearby-page .eyebrow {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-bottom: var(--space-2);
+}
+
+.nearby-privacy-notice {
+  margin-block: var(--space-4);
+  background: color-mix(in oklab, var(--color-text-muted) 8%, var(--color-surface));
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+/* ---- Tabs ---- */
+.nearby-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin-block: var(--space-4) var(--space-3);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-muted);
+}
+
+.nearby-tab {
+  flex: 1;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.nearby-tab:hover {
+  color: var(--color-text);
+}
+
+.nearby-tab.is-active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-color: color-mix(in oklab, var(--color-primary) 35%, var(--color-border));
+  font-weight: 600;
+}
+
+/* ---- Panel ---- */
+.nearby-panel-inner {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* ---- Search form ---- */
+.nearby-search-form {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.nearby-search-form input {
+  flex: 1 1 220px;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.nearby-search-form input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-color: var(--color-focus);
+}
+
+/* ---- Result list ---- */
+.nearby-result-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.nearby-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.nearby-result-item:hover {
+  background: var(--color-surface-muted);
+  border-color: color-mix(in oklab, var(--color-primary) 30%, var(--color-border));
+}
+
+.nearby-result-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.nearby-result-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* ---- 已选地点态 ---- */
+.nearby-distance-card {
+  margin-block: var(--space-4);
+}
+
+.nearby-merchant-placeholder {
+  margin-block: var(--space-4);
+  padding: var(--space-5);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-text-muted) 4%, var(--color-surface));
+  text-align: center;
+}
+
+.nearby-merchant-placeholder h2 {
+  margin-bottom: var(--space-2);
+}
+
+/* ---- 商户搜索表单 + 测试模式 ---- */
+.nearby-merchant-search-form {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-block: var(--space-4);
+}
+
+.nearby-merchant-search-form input {
+  flex: 1 1 220px;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.nearby-merchant-search-form input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-color: var(--color-focus);
+}
+
+.nearby-mock-mode-card {
+  margin-block: var(--space-3);
+}
+
+/* ---- 商户结果区 ---- */
+.nearby-merchant-results {
+  margin-block: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.nearby-source-attribution {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.nearby-empty-notice {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-text-muted) 6%, var(--color-surface));
+}
+
+.nearby-suggestions {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* ---- 商户卡片 ---- */
+.nearby-merchant-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.nearby-merchant-card {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.nearby-merchant-card.is-primary {
+  border-color: color-mix(in oklab, var(--color-primary) 50%, var(--color-border));
+  background: color-mix(in oklab, var(--color-primary) 6%, var(--color-surface));
+  box-shadow: 0 1px 3px color-mix(in oklab, var(--color-primary) 15%, transparent);
+}
+
+.nearby-merchant-card[hidden] {
+  display: none;
+}
+
+.nearby-merchant-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.nearby-merchant-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.nearby-merchant-badge {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.nearby-merchant-category {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.nearby-merchant-meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.nearby-merchant-distance {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.nearby-merchant-separator {
+  color: var(--color-text-muted);
+}
+
+.nearby-merchant-address {
+  color: var(--color-text-muted);
+}
+
+.nearby-merchant-region {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.nearby-merchant-map-link {
+  justify-self: start;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+.nearby-merchant-map-link:hover {
+  background: color-mix(in oklab, var(--color-primary) 10%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-primary) 40%, var(--color-border));
+}
+
+.expand-merchants {
+  margin-top: var(--space-2);
+  width: 100%;
+}
+
+/* ---- 移动端 320px 优化 ---- */
+@media (max-width: 360px) {
+  .nearby-tab {
+    font-size: 0.8rem;
+    padding: var(--space-2);
+  }
+
+  .nearby-search-form {
+    flex-direction: column;
+  }
+
+  .nearby-search-form input {
+    flex-basis: auto;
+  }
+
+  .nearby-merchant-search-form {
+    flex-direction: column;
+  }
+
+  .nearby-merchant-search-form input {
+    flex-basis: auto;
+  }
+
+  .nearby-merchant-card {
+    padding: var(--space-3);
+  }
+
+  .nearby-merchant-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+
+  .nearby-merchant-separator {
+    display: none;
+  }
+}

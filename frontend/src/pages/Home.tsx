@@ -16,6 +16,14 @@ export default function Home() {
       </div>
       <p className="microcopy">预设问卷无需登录 · AI 只推荐食物，不编造商家</p>
 
+      <h2>附近商家</h2>
+      <p>选定食物后，帮你查附近商家。精确坐标只用于当前搜索，不写入历史。</p>
+      <div className="hero-actions">
+        <Link to="/nearby" className="button button-secondary">
+          选地点找商家
+        </Link>
+      </div>
+
       <h2>大家都在吃什么</h2>
       <p>社区功能建设中，后续提供明确的食物直达入口。</p>
 

@@ -6,10 +6,18 @@
  */
 
 import type {
+  DemoLocationListResponse,
+  DemoLocationSelectResponse,
+  LocationReverseRequestV1,
+  LocationReverseResponseV1,
+  LocationSearchRequestV1,
+  LocationSearchResponseV1,
   QuestionnaireNextRequestV1,
   QuestionnaireRecomputeResult,
   RecommendationsGenerateRequestV1,
   RecommendationsGenerateResponseV1,
+  RestaurantSearchRequestV1,
+  RestaurantSearchResponseV1,
 } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
@@ -124,5 +132,60 @@ export const api = {
     options?: Omit<RequestOptions, 'method' | 'body'>,
   ): Promise<RecommendationsGenerateResponseV1> {
     return api.post<RecommendationsGenerateResponseV1>('/recommendations', request, options);
+  },
+
+  // -------- 地点上下文（P3-01） --------
+  /**
+   * P3-01：POST /locations/search
+   * 手动地点搜索（mock：本地匹配 demo 数据）。
+   * 返回 LocationTokenInfo 列表（G-16：不含坐标，只有 location_token）。
+   */
+  locationSearch(
+    request: LocationSearchRequestV1,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<LocationSearchResponseV1> {
+    return api.post<LocationSearchResponseV1>('/locations/search', request, options);
+  },
+
+  /**
+   * P3-01：POST /locations/reverse
+   * 浏览器定位反向地理编码（mock：WGS84→GCJ-02 后就近匹配 demo）。
+   * G-16：坐标在 POST body，不在 URL；后端转换后只存内存。
+   */
+  locationReverse(
+    request: LocationReverseRequestV1,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<LocationReverseResponseV1> {
+    return api.post<LocationReverseResponseV1>('/locations/reverse', request, options);
+  },
+
+  /**
+   * P3-01：GET /locations/demo
+   * 演示地点列表（不含坐标，不含 token）。
+   */
+  locationDemo(): Promise<DemoLocationListResponse> {
+    return api.get<DemoLocationListResponse>('/locations/demo');
+  },
+
+  /**
+   * P3-01：POST /locations/demo/{code}/select
+   * 选择演示地点，签发 location_token。
+   */
+  locationDemoSelect(code: string): Promise<DemoLocationSelectResponse> {
+    return api.post<DemoLocationSelectResponse>(`/locations/demo/${encodeURIComponent(code)}/select`);
+  },
+
+  // -------- 商户搜索（P3-02/P3-03） --------
+  /**
+   * P3-02：POST /restaurants/search
+   * 用 location_token + food_code + radius_m 搜索附近商家。
+   * G-16：响应不含坐标，只有 distance_m 粗略距离。
+   * mock_mode 仅在 POI_PROVIDER=mock 时生效，用于 UI 重复触发四种状态。
+   */
+  restaurantsSearch(
+    request: RestaurantSearchRequestV1,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<RestaurantSearchResponseV1> {
+    return api.post<RestaurantSearchResponseV1>('/restaurants/search', request, options);
   },
 };

@@ -2,10 +2,10 @@
 
 > 这是项目后续执行的唯一实时计划清单。  
 > 最后更新：2026-08-06  
-> 当前阶段：P2 核心切片验收完成，进入 P3 位置与商户落地  
-> 当前任务：P2-05 验收通过（20/50）—— 问卷→推荐全链路串联（P2-03A next API + P2-04 recommendations API + 前端双视图 + display_if DAG 增强 + 1→3→5 渐进展示）；后端 90 单测全绿、前端 15 vitest 全绿、CI 10+ 次连续全绿；当前推进 P3-01 LocationContext + P3-02 Mock POIProvider + P3-03 商户结果页  
-> 清单进度：**20/50 已完成，0 项进行中，30 项待开始**（下一步主任务切换为 P3-01 LocationContext）  
-> 工程状态：已 `git init`（main 分支，15+ 个提交；GitHub 远端 Shenhaihub/eatwhat@private，10+ 次 CI 连续全绿）；frontend 完整前端壳 + Recommend.tsx 问卷/推荐双视图 + 1→3→5 渐进展示 + localStorage 草稿 + vite dev proxy；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ P2-02 规则引擎/21 测试 + P2-03 问题库 v1.0/状态机/12 测试 + P2-03A next API/7 HTTP 测试 + P2-04 recommendations API/9 测试 + display_if DAG 增强；尚未接入数据库、认证、AI、地图与商户功能
+> 当前阶段：P3 位置与商户落地（P3-01/02/03 完成）  
+> 当前任务：P3-01/02/03 完成（23/50）—— LocationContext 三入口（浏览器/手动/演示）+ WGS84→GCJ-02 转换 + 短 TTL location_token + max_distance_m 维度 + Mock POIProvider 四态（正常/空/慢/错误）+ 商户结果页（1 主 + 4 折叠 + 来源标注 + 地图跳转）；后端 136 单测全绿、前端 27 vitest 全绿、ruff/mypy/oxlint/tsc 全绿；下一步推进 P3-04 高德 Live POIProvider  
+> 清单进度：**23/50 已完成，0 项进行中，27 项待开始**（下一步主任务切换为 P3-04 高德 Live POIProvider）  
+> 工程状态：已 `git init`（main 分支，15+ 个提交；GitHub 远端 Shenhaihub/eatwhat@private，10+ 次 CI 连续全绿）；frontend 完整前端壳 + Recommend.tsx 问卷/推荐双视图 + 1→3→5 渐进展示 + Nearby.tsx 地点选择/商户搜索双视图 + localStorage 草稿 + vite dev proxy；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ P2-02 规则引擎/21 测试 + P2-03 问题库 v1.0/状态机/12 测试 + P2-03A next API/7 HTTP 测试 + P2-04 recommendations API/9 测试 + display_if DAG 增强 + P3-01 LocationContext（三入口 + 坐标转换 + token 管理）/27 测试 + P3-02 MockPOIProvider（四态）/19 测试 + P3-03 商户搜索 API；尚未接入数据库、认证、AI、高德 Live 地图
 
 ## 1. 使用规则
 
@@ -242,17 +242,20 @@
 
 目标：把已经确认的食物决定映射到真实可去的附近商户，同时保持定位最小化。
 
-- [ ] **P3-01 实现 LocationContext 与三种入口**
+- [x] **P3-01 实现 LocationContext 与三种入口**
   - 预期成果：本次浏览器定位、手动区域、演示位置；短 TTL、绑定当前会话、不可篡改。
   - 验收：精确坐标不进 URL、业务历史和普通日志；拒绝授权仍可使用手动/演示路径。
+  - 成果：`backend/app/services/location.py`（WGS84→GCJ-02 转换 + LocationTokenStore 内存 TTL 管理）+ `backend/app/api/v1/location.py`（reverse/search/demo/demo-select 四端点，prefix=/api/v1/locations）+ `frontend/src/pages/Nearby.tsx`（三入口 Tab + max_distance_m 维度收集 + localStorage 持久化）；27 个后端测试 + 6 个前端测试全绿。
 
-- [ ] **P3-02 实现 Mock POIProvider**
+- [x] **P3-02 实现 Mock POIProvider**
   - 为什么：先固定排序、零结果、超时和展示行为，不让第三方 API 干扰 UI 验证。
   - 验收：正常、空、慢、错误四类场景可重复触发。
+  - 成果：`backend/app/services/poi_provider.py`（MockPOIProvider 四态：normal 生成确定性 5 条 / empty 返回空 + 扩大范围建议 / slow 延迟后返回 / error 抛 503）+ `backend/app/schemas/poi.py`（POIItem 严格 schema，extra="forbid"）+ `backend/app/api/v1/restaurants.py`（/restaurants/search 端点）；19 个后端测试全绿。
 
-- [ ] **P3-03 实现商户结果页**
+- [x] **P3-03 实现商户结果页**
   - 预期成果：一家“最近匹配”主商户、四家折叠备选、来源/状态说明和地图跳转。
   - 验收：不把距离排序表述为“最好”；未知营业状态不猜测。
+  - 成果：`frontend/src/pages/Nearby.tsx`（MerchantCard 组件：1 主 + 4 折叠 + 来源标注 + 地图跳转 + mock_mode 四态切换器）+ `frontend/src/styles/nearby.css`（商户卡片样式 + 320px 移动端优化）+ `frontend/src/services/api/types/poi.ts`（POIItem/Meta/Suggestion 类型）；6 个前端测试全绿（正常搜索/展开/空结果/错误态/空 food_code/mock_mode 持久化）。
 
 - [ ] **P3-04 接入高德 Live POIProvider**
   - 依赖：P3-01–P3-03。
@@ -724,18 +727,62 @@
   - max_distance_m 维度在 P3-01 LocationContext 时补上。
 - 对后续的影响：P2 全部关闭，进入 P3 位置与商户落地。P3-01 需要实现 LocationContext（浏览器/手动/演示三种入口）+ max_distance_m 维度 + 前端地点选择组件。
 
+### 2026-08-06 — PLAN-029（P3-01/02/03 完成 ✓ 23/50，LocationContext 三入口 + Mock POIProvider 四态 + 商户结果页）
+
+- 状态：P3-01/02/03 全部完成 ✓（23/50）。P3 位置与商户落地的 Mock 链路打通；当前进行项切换为 P3-04 高德 Live POIProvider。
+- 做了什么：
+  1. **P3-01 LocationContext 三入口**：
+     - 后端 `backend/app/services/location.py`：实现 WGS84→GCJ-02 坐标转换（标准偏移算法，为 P3-04 高德 Live 准备）+ `LocationTokenStore`（内存 TTL 管理，默认 30 分钟，token 不透明、不可篡改、不写日志）。
+     - 后端 `backend/app/api/v1/location.py`：四个端点（prefix=/api/v1/locations）
+       - `POST /locations/reverse`：浏览器 WGS84 坐标 → 逆地理 → location_token + display_name
+       - `POST /locations/search`：关键词手动搜索 → 候选地点列表（均签发 token）
+       - `GET /locations/demo`：5 个武汉预设演示地点（光谷/江汉路/汉口站/街道口/楚河汉街）
+       - `POST /locations/demo/{code}/select`：选择演示地点 → location_token
+     - 前端 `frontend/src/pages/Nearby.tsx`：三入口 Tab（浏览器定位 / 手动搜索 / 演示地点）+ max_distance_m 维度收集（500/1000/3000/5000 米单选，默认 1000）+ localStorage 持久化（token/info/distance/food_code/mock_mode 五键）+ 拒绝授权自动回退提示。
+     - G-16 合规：精确坐标只在内存中转换存储，不进 URL（token 是不透明字符串）、不进业务历史、不进普通日志。
+  2. **P3-02 Mock POIProvider 四态**：
+     - 后端 `backend/app/services/poi_provider.py`：`MockPOIProvider` 实现 `search_nearby_restaurants()`，四态可重复触发：
+       - `normal`：基于 food_code 哈希生成确定性 5 条 mock 商户（名称/距离/地址稳定可重复，便于测试）
+       - `empty`：返回空数组 + suggestions（expand_radius 建议 3000m）
+       - `slow`：`asyncio.sleep(POI_MOCK_SLOW_MS)` 后返回 normal 数据（测试用 50ms，CI 友好）
+       - `error`：抛 `AppError(SERVICE_UNAVAILABLE, 503)`，前端显示错误 + 重试
+     - 后端 `backend/app/schemas/poi.py`：`POIItem`（provider/poi_id/name/category_text/distance_m/address/city_name/district_name/map_uri）+ `RestaurantSearchRequestV1` + `RestaurantSearchResponseV1`，全部 `extra="forbid"`，不含 lat/lng 精确坐标（G-16）。
+     - 后端 `backend/app/api/v1/restaurants.py`：`POST /restaurants/search` 端点，校验 food_code 存在且启用 + location_token 有效 → 调用 POIProvider。
+  3. **P3-03 商户结果页**：
+     - 前端 `frontend/src/pages/Nearby.tsx`：
+       - `MerchantCard` 组件：主商户（isPrimary）高亮 + "最近匹配"徽章；折叠态用 `hidden` 属性隐藏（不卸载，保留 DOM 语义）；距离按 km/m 自适应展示；地图跳转走 `map_uri`（高德 URI Scheme），不在前端暴露坐标。
+       - 1 主 + 4 折叠：默认只显示 priority=1 的主商户，点击"查看其他 4 家备选"展开全部 5 条。
+       - 来源标注：`meta.provider_mode === 'mock'` 显示"Mock 演示数据"，否则显示"高德地图"。
+       - mock_mode 四态切换器：单选 normal/empty/slow/error，切换后立即生效并可重搜。
+       - 空结果态：显示"未在 X 米内找到匹配商家" + 扩大范围建议按钮。
+       - 错误态：显示错误信息 + "再试一次"按钮。
+     - 前端 `frontend/src/styles/nearby.css`：商户卡片完整样式（主商户高亮 + 徽章 + 距离/地址/区域/地图链接）+ 320px 移动端优化（表单纵向排列 + meta 换行 + 隐藏分隔符）。
+     - 前端 `frontend/src/services/api/types/poi.ts`：POIItem/Meta/Suggestion/Request/Response 类型，1:1 映射后端 schema。
+     - 前端 `frontend/src/services/api/client.ts`：新增 `api.restaurantsSearch()` 方法。
+  4. **测试覆盖**：
+     - 后端：`test_location.py`（27 测试：坐标转换/token 签发与过期/四端点 HTTP/演示地点选择/拒绝无效 token）+ `test_poi.py`（19 测试：四态 MockPOIProvider/确定性生成/empty suggestions/slow 延迟/error 503/restaurants 端点 food_code 校验/token 校验/limit 边界）。
+     - 前端：`Nearby.test.tsx`（12 测试：原 6 个地点选择 + 新增 6 个商户搜索——正常搜索/展开/空结果/错误态/空 food_code/mock_mode 持久化）。
+  5. 全部门禁：后端 ruff/mypy/pytest(136) 全绿；前端 oxlint/tsc/vitest(27)/vite build 全绿。
+- 注意事项：
+  - location_token 是不透明字符串，前端不解析其内容，只在请求中回传。
+  - MockPOIProvider 的 normal 模式用 food_code 哈希生成确定性数据，保证同一 food_code 多次搜索结果一致（便于测试和演示）。
+  - 商户结果称"最近匹配"而非"最好吃/最推荐"（设计审计 §6.3）。
+  - 距离排序不表述为"最好"；未知营业状态不猜测（无营业时间字段时不显示）。
+  - mock_mode 切换器仅在 POI_PROVIDER=mock 时生效，P3-04 接入高德 Live 后需隐藏或保留为开发模式。
+- 对后续的影响：P3 Mock 链路全部打通（地点选择 → token 签发 → 商户搜索 → 结果展示），可独立于高德 API 进行端到端验收。P3-04 需接入高德 Live POIProvider（密钥只在后端、WGS84→GCJ-02 已就绪、字段归一化、超时/重试/配额监控/缓存策略），P3-05 地图切片验收。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. P2 核心切片全部完成（20/50）：问卷→next API→规则引擎→5 候选→前端 1→3→5 渐进展示 全链路打通。当前主任务切换为 **P3-01 LocationContext**，核心验收点：
-   - 后端 LocationContext schema（浏览器 WGS84 / 手动地点 / 演示地点三种入口）
-   - 坐标转换 WGS84→GCJ-02（为 P3-04 高德 Live 准备）
-   - max_distance_m 维度补入问卷或地点选择页
-   - 精确坐标不写入 URL、普通日志、业务历史（G-16）
-   - 拒绝定位仍可使用手动/演示路径
-4. P3-02 Mock POIProvider：正常/空/慢/错误四类场景可重复触发。
-5. P3-03 商户结果页：一家"最近匹配"主商户、四家折叠备选、来源/状态说明和地图跳转。
-6. 全部门禁一条都不能少：`backend: ruff + mypy + pytest` 和 `frontend: oxlint + tsc + vitest + vite build`，必须全部 0 报错，再 git commit+push。
-7. 全量门禁通过后必须同步本 PLAN（清单项状态 + 执行日志）+ 项目记忆。
-8. MEM-024 反"固定首候选"盯防延续到 P5：AI 最终生成同样需要 4 组以上差异化参数化测试。
+3. P3 Mock 链路全部完成（23/50）：LocationContext 三入口 + Mock POIProvider 四态 + 商户结果页 全链路打通。当前主任务切换为 **P3-04 高德 Live POIProvider**，核心验收点：
+   - 密钥只在后端（环境变量，不进前端/日志/响应）
+   - WGS84→GCJ-02 转换已就绪（P3-01 已实现，复用 `location.py`）
+   - 字段归一化：高德响应 → POIItem schema（与 Mock 一致）
+   - 超时/重试/配额监控/缓存策略
+   - Live 契约测试通过；失败能回到手动/重试而不泄漏原始响应敏感内容
+4. P3-05 地图切片验收：真实与 Mock 的前端契约一致；5km 边界、零结果、坐标转换错误和第三方限额均有测试。
+5. 全部门禁一条都不能少：`backend: ruff + mypy + pytest` 和 `frontend: oxlint + tsc + vitest + vite build`，必须全部 0 报错，再 git commit+push。
+6. 全量门禁通过后必须同步本 PLAN（清单项状态 + 执行日志）+ 项目记忆。
+7. MEM-024 反"固定首候选"盯防延续到 P5：AI 最终生成同样需要 4 组以上差异化参数化测试。
+8. P5-04A 接 AI 时必须补 1→3→5 渐进展示（不要再推迟到更晚）。

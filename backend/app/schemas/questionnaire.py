@@ -18,8 +18,9 @@ ENTRY_INTENT_VALUES: tuple[str, ...] = (
     "user_choice",
 )
 
-# P2 状态机显式支持的七维字段（前 6 个）。
-# max_distance_m 与 ai_follow_up_answers 在 P3/P5 再纳入问卷，当前不强制、不出题。
+# P3-01 起：七维全部纳入 covered_dimensions 追踪。
+# max_distance_m 不出问卷题（在地点选择页收集），但需要在 covered_dimensions 中可见。
+# ai_follow_up_answers 在 P5 再纳入。
 MAPPABLE_DIMENSION_FIELDS: tuple[str, ...] = (
     "meal_period",
     "appetite",
@@ -27,6 +28,7 @@ MAPPABLE_DIMENSION_FIELDS: tuple[str, ...] = (
     "tastes",
     "budget",
     "explicit_food_preference",
+    "max_distance_m",
 )
 
 
@@ -59,6 +61,7 @@ class DimensionMapping(BaseModel):
         "tastes",
         "budget",
         "explicit_food_preference",
+        "max_distance_m",
     ]
     is_array: bool = False
     # 所有 Q 的 value 都是枚举的 .value 字面量（例如 "lunch" 对应 MealPeriod.LUNCH）

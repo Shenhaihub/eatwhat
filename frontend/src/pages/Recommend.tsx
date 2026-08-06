@@ -80,6 +80,7 @@ const COVERED_DIMENSION_LABEL: Record<string, string> = {
   tastes: '口味',
   budget: '预算',
   explicit_food_preference: '明确想吃',
+  max_distance_m: '搜索距离',
 };
 
 const BUDGET_FIT_LABEL: Record<string, string> = {
