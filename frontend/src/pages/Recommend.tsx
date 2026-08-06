@@ -97,6 +97,8 @@ export default function Recommend() {
     error: null,
     items: null,
   });
+  // D-008：1→3→5 渐进展示。初始只展示 priority=1，点击展开到 3，再点击到 5。
+  const [expandLevel, setExpandLevel] = useState<1 | 3 | 5>(1);
   const debounceTimer = useRef<number | null>(null);
   const fetchSeq = useRef(0);
   const recAbort = useRef<AbortController | null>(null);
@@ -206,6 +208,7 @@ export default function Recommend() {
       // 按 priority 升序兜底（后端已保证严格递增，但前端 sort 不影响稳定性）
       const sorted = [...items].sort((a, b) => a.priority - b.priority);
       setRecState({ loading: false, error: null, items: sorted });
+      setExpandLevel(1); // D-008：进入结果态时重置为只展示 1 张
     } catch (err) {
       if (controller.signal.aborted) return;
       const message =
@@ -435,6 +438,7 @@ export default function Recommend() {
               className="recommendation-card"
               data-food-code={item.food_code}
               data-priority={item.priority}
+              hidden={item.priority > expandLevel}
             >
               <header className="recommendation-card-header">
                 <span className="recommendation-rank" aria-label={`第 ${item.priority} 推荐`}>
@@ -464,6 +468,17 @@ export default function Recommend() {
               ) : null}
             </article>
           ))}
+
+          {expandLevel < 5 && (
+            <button
+              type="button"
+              className="button button-secondary button-large expand-recommendations"
+              data-testid="expand-recommendations"
+              onClick={() => setExpandLevel(expandLevel === 1 ? 3 : 5)}
+            >
+              {expandLevel === 1 ? '查看更多推荐（3/5）' : '查看全部推荐（5/5）'}
+            </button>
+          )}
 
           <div className="q-footer">
             <button

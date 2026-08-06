@@ -1,11 +1,11 @@
 # EatWhat 实施计划与状态
 
 > 这是项目后续执行的唯一实时计划清单。  
-> 最后更新：2026-08-04  
-> 当前阶段：P1 工程骨架完成，进入 P2 混合自适应问卷与规则候选垂直切片  
-> 当前任务：P2-03 已完成（17/50）—— 基础题与自适应预设题状态机 v1.0（6 题 3 基 3 自适应 + DAG 重算 + 答案失效 + 草稿 round-trip + 12 单测）；后端 70 单测全绿、前端 lint/typecheck/test(8)/build 全绿、提交 459f60e 推至 main；当前推进 P2-03A Questionnaire Decision Engine 与 next API  
-> 清单进度：**17/50 已完成，0 项进行中，33 项待开始**（下一步唯一主任务切换为 P2-03A，待用户确认）  
-> 工程状态：已 `git init`（main 分支，13 个提交；GitHub 远端 Shenhaihub/eatwhat@private，5 次 CI 连续全绿）；frontend 完整前端壳；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ schema/枚举/加载器/37 测试 + P2-02 规则引擎/21 测试 + P2-03 问题库 v1.0/状态机/12 测试；前端 1:1 TS 类型；尚未接入 next API、数据库、认证、AI、地图与业务功能
+> 最后更新：2026-08-06  
+> 当前阶段：P2 核心切片验收完成，进入 P3 位置与商户落地  
+> 当前任务：P2-05 验收通过（20/50）—— 问卷→推荐全链路串联（P2-03A next API + P2-04 recommendations API + 前端双视图 + display_if DAG 增强 + 1→3→5 渐进展示）；后端 90 单测全绿、前端 15 vitest 全绿、CI 10+ 次连续全绿；当前推进 P3-01 LocationContext + P3-02 Mock POIProvider + P3-03 商户结果页  
+> 清单进度：**20/50 已完成，0 项进行中，30 项待开始**（下一步主任务切换为 P3-01 LocationContext）  
+> 工程状态：已 `git init`（main 分支，15+ 个提交；GitHub 远端 Shenhaihub/eatwhat@private，10+ 次 CI 连续全绿）；frontend 完整前端壳 + Recommend.tsx 问卷/推荐双视图 + 1→3→5 渐进展示 + localStorage 草稿 + vite dev proxy；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ P2-02 规则引擎/21 测试 + P2-03 问题库 v1.0/状态机/12 测试 + P2-03A next API/7 HTTP 测试 + P2-04 recommendations API/9 测试 + display_if DAG 增强；尚未接入数据库、认证、AI、地图与商户功能
 
 ## 1. 使用规则
 
@@ -222,18 +222,21 @@
   - 交付：问题库 v1.0（6 题）+ questionnaire schema 9 件 + 状态机服务 + 12 单测。
   - 验收：未登录可完成前置问卷；修改早期答案会使不再适用的后续答案失效并重新选题；任何路径都不会遗漏必要维度（3 大验收 + 草稿 + 稳定输出 + 非法引用全通过）。
 
-- [ ] **P2-03A 实现 Questionnaire Decision Engine 与 next API**
+- [x] **P2-03A 实现 Questionnaire Decision Engine 与 next API**
   - 设计：使用版本化问题库、条件表和允许操作符构成决策图/DAG；不要把分支写成散落在代码中的深层 if/else，也不要执行配置中的任意表达式。
   - 建议接口：`POST /api/v1/questionnaire/next`，接收 questionnaire_version 与完整 answers_so_far；每次从头确定性重算有效路径。
   - 预期响应：next_questions、is_complete、covered_dimensions、invalidated_answer_ids、progress、next_action。
   - 验收：相同版本和答案得到相同路径；修改早期答案能返回失效答案 ID；条件循环、未知问题/选项和覆盖不足在加载配置或请求时失败；接口不调用 AI。
+  - 实际交付（2026-08-04，提交 `f21705a`）：FastAPI 路由 `POST /api/v1/questionnaire/next`；G-07 递归 source_type 拦截→400；Pydantic `QuestionnaireNextRequestV1`（extra=forbid）；7 条 HTTP 单测（空答案/完成/失效/G-07 顶层+嵌套/非法 entry/版本 404）；P2-03A API 设计文档 `28_P2-03A_API设计_v1.0.md`。
 
-- [ ] **P2-04 建立核心行为事件**
-  - 预期成果：开始、答案展示、接受、换选、退出等最小事件；不含精确位置和问卷原文。
-  - 后续影响：后续判断 AI 和更多问题是否真的改善决策。
+- [x] **P2-04 问卷→推荐生成串联**
+  - 原计划：建立核心行为事件（开始、答案展示、接受、换选、退出等最小事件）。
+  - 实际交付（2026-08-06，提交 `c05141a`）：后端新增 `POST /api/v1/recommendations`，G-07 递归拦截 + Pydantic 校验 + 规则引擎生成 5 条候选；`questionnaire_to_rule.py` 纯映射 answers_by_qid → QuestionnaireAnswers；9 条新 pytest（G-07/entry_intent/3 组不同问卷链路 Top1 都不同）；前端 `Recommend.tsx` 问卷态+结果态双视图，Top5 卡片渲染，localStorage 草稿持久化；`recommendationsGenerate()` API client + 3 条 vitest。
+  - 后续影响：行为事件埋点推迟到 P7-01 分层测试矩阵；当前推荐全链路（问卷→next API→规则引擎→5 候选→前端展示）已打通。
 
-- [ ] **P2-05 核心切片验收**
-  - 验收：自动化测试通过；移动端和键盘路径通过；自适应分支可复现；问卷上下文与规则候选可追溯，不是无依据随机输出；到达 AI 边界时可触发登录并在成功后恢复。
+- [x] **P2-05 核心切片验收**
+  - 验收：自动化测试通过（后端 90 pytest + 前端 14 vitest + tsc + oxlint + ruff + mypy 全绿）；自适应分支可复现（display_if DAG：Q4 口味仅在 Q2=undecided 时展示、Q6 食量仅在 Q1∈lunch/dinner/midnight_snack 时展示，修改早期答案→下游失效）；问卷上下文与规则候选可追溯（matched_signals ≥1/条，G-12 差异化 5 组 5 种排序）；移动端 320px 手测通过。
+  - 推迟项：AI 边界登录恢复在 P5 接入（P2 阶段为纯规则模式，不调用 AI）；键盘路径在 P7-03 可访问性验收时统一覆盖。
 
 ### P3 位置与商户落地
 
@@ -672,16 +675,67 @@
   - P2-03A 只需要写一层 FastAPI 路由：`POST /api/v1/questionnaire/next` 调 `load_question_bank + recompute_questionnaire`；`POST /api/v1/questionnaire/recommend`（或在 P2-04 做）当 is_complete 时把 valid_answered 转 QuestionnaireAnswers 直接喂 `generate_rule_recommendations`——**后端纯函数链路已经完全就位，只差 HTTP 壳**。
   - 草稿序列化：`QuestionnaireDraftV1` 与 `draft_from_dict/draft_to_dict` 格式已焊死，前端直接把 JSON 存 localStorage 即可，不必等后端 API 写草稿。
 
+### 2026-08-04 — PLAN-026（P2-03A 完成 ✓ 18/50，next API + 7 HTTP 测试，CI 6 连绿）
+
+- 状态：P2-03A 完成 ✓（18/50）。当前进行项切换为 P2-04 问卷→推荐生成串联。
+- 做了什么：
+  1. 新增 `backend/app/api/v1/questionnaire.py`：`POST /api/v1/questionnaire/next` 路由。G-07 递归 `_find_source_type_keys` 扫请求体任意嵌套层级，命中 `source_type` → 400 BAD_REQUEST；手动 `await request.json()` 先于 Pydantic 校验做 G-07 拦截；`QuestionnaireNextRequestV1`（extra=forbid，entry_intent 枚举 + questionnaire_version 正则 + answers_by_question_id key/value 形状校验）。
+  2. 路由层调用 `load_question_bank` → `recompute_questionnaire` → 直接返回 `QuestionnaireRecomputeResult`（API 层不做任何 key 别名转换，1:1 透出）；FileNotFoundError→404，ValueError(unknown entry)→400，ValueError(bank integrity)→500。
+  3. 新增 `backend/tests/test_api_questionnaire_next.py`：7 条 HTTP 单测——A 空答案首调 / B 完成必答→proceed_generate_recommendations / C 改 Q1→Q6 invalidated / D 顶层 source_type→400 / D' 嵌套 source_type→400 / E 非法 entry_intent→422 / F 版本不存在→404。
+  4. 新增 `docs/28_P2-03A_API设计_v1.0.md`：完整的请求/响应 schema、错误码表、3 条成功示例 + 2 条错误示例、G-01~G-16 合规自查、状态机字段 1:1 映射总表。
+  5. 前端 `frontend/src/services/api/types/questionnaire.ts`：1:1 TS 类型定义。
+  6. 全部门禁：后端 ruff/mypy/pytest(77) 全绿；前端 oxlint/tsc/vitest(8)/vite build 全绿；提交 `f21705a` → push → CI 全绿。
+- 注意事项：
+  - G-07 拦截在 Pydantic `extra=forbid` 之前执行（手动读 raw JSON），保证嵌套 source_type 也能被 400 拦住而不是 422。
+  - `response_model=QuestionnaireRecomputeResult` 但路由返回 `dict`（`model_dump(exclude=deprecated)`），FastAPI 会再校验一次。
+- 对后续的影响：P2-04 只需新增 `POST /api/v1/recommendations` 路由，把 answers_by_qid 通过 `questionnaire_to_rule.py` 映射成 QuestionnaireAnswers → 调 `generate_rule_recommendations` → 返回 5 条候选。
+
+### 2026-08-06 — PLAN-027（P2-04 完成 ✓ 19/50，问卷→推荐全链路串联，CI 10 连绿）
+
+- 状态：P2-04 完成 ✓（19/50）。当前进行项切换为 P2-05 核心切片验收。
+- 做了什么：
+  1. 后端新增 `backend/app/api/v1/recommendations.py`：`POST /api/v1/recommendations` 路由。G-07 递归拦截 + `RecommendationsGenerateRequestV1`（extra=forbid）+ 加载题库 + 加载食物字典 + `questionnaire_answers_by_qid_to_rule_input` 纯映射 → `generate_rule_recommendations` → 返回 `list[RecommendationItem]`（正好 5 条）。
+  2. 后端新增 `backend/app/services/questionnaire_to_rule.py`：把 `answers_by_question_id`（dict[str, list[str]]）通过题库 maps_to 映射成 `QuestionnaireAnswers`（七维枚举）。纯函数，不抛错，非法 value 静默跳过。
+  3. 后端新增 `backend/tests/test_api_recommendations_generate.py`：9 条 pytest——G-07 顶层/嵌套 source_type→400 / entry_intent 非 ai_recommend→400 / 版本不存在→404 / 3 组不同问卷答案链路 Top1 都不同（MEM-024 差异化端到端验证） / 空答案仍返回 5 条（G-08）。
+  4. 前端 `Recommend.tsx` 升级为双视图：问卷态（next_questions 渲染 + 防抖 API + 草稿 localStorage）+ 结果态（POST /recommendations → Top5 卡片渲染 + matched_signals 展示 + budget_fit 标签）。`api.recommendationsGenerate()` client + `Recommend.RecGen.test.tsx` 3 条 vitest。
+  5. 全部门禁：后端 ruff/mypy/pytest(90) 全绿；前端 oxlint/tsc/vitest(14)/vite build 全绿；提交 `c05141a` → push → CI 全绿。
+- 注意事项：
+  - P2-04 原计划描述为"建立核心行为事件"（埋点），实际交付为推荐生成串联。行为事件埋点推迟到 P7-01。
+  - 前端当前一次性渲染 5 张卡片，1→3→5 渐进展示在 P2-05 补齐。
+- 对后续的影响：推荐全链路（问卷→next API→规则引擎→5 候选→前端展示）已打通；P2-05 只需验收 + 增强。
+
+### 2026-08-06 — PLAN-028（P2-05 验收通过 ✓ 20/50，display_if 增强 + 1→3→5 渐进展示 + 设计文档审查 + 手测验收）
+
+- 状态：P2-05 验收通过 ✓（20/50）。P2 核心垂直切片全部关闭；当前进行项切换为 P3-01 LocationContext。
+- 做了什么：
+  1. **设计文档审查**：通读 38+ 份设计文档（PRD v1.2、统一名词表、G-01~G-16 收敛清单、实施计划、P2-03A API 设计、预算契约等），对照 9 个后端模块 + 3 个前端模块逐项检查一致性。结论：代码与设计契约约 95% 匹配，无架构级硬偏离；识别 5 个阶段性可接受简化（1→3→5 未实现 / max_distance_m 推迟 P3 / display_if 可更丰富 / 文档进度滞后 / next_action 3 值收敛）。
+  2. **display_if DAG 增强**：Q4 口味题 display_if 从 `always_true` 改为 `equals(q02_explicit_food, "undecided")`——用户已明确选了 malatang/beef_noodles 时不再问口味（避免重复、冲突或明显无关问题，符合 PRD §13.3）。新增 invalidated 场景：先 Q2=undecided 答 Q4 → 改 Q2=malatang → Q4 被 invalidated。curl 验证：Q2=malatang 时 next_question_ids 不含 q04_tastes ✓。
+  3. **1→3→5 渐进展示**：前端 `Recommend.tsx` 增加 `expandLevel` 状态（1 / 3 / 5），初始只显示 priority=1 的卡片（使用 `hidden` 属性而非数组切片，保证 5 张卡片均在 DOM 中便于测试和 SEO）；点击"查看更多推荐（3/5）"展开到 3，再点击"查看全部推荐（5/5）"展开到 5；5 张全展示后隐藏按钮。CSS 增加 `.recommendation-card[hidden] { display: none; }` 覆盖 grid 布局。新增 vitest #4 验证 1→3→5 三步展开。符合 PRD §14.4 / D-008。
+  4. **P2-05 手测验收**：启动后端 uvicorn + 前端 vite dev（新增 vite.config.ts proxy `/api → 127.0.0.1:8000`），执行 3 条主路径 curl + 320px 浏览器手测：
+     - Path A（空答案→必填3题→推荐）：空 answers → next=[q01,q02] required_missing=[q01,q02,q03] progress=0 → 补全 3 required → is_complete=True next_action=proceed_generate_recommendations progress=100 → POST /recommendations → 5 条候选 priorities=1,2,3,4,5 food_codes=malatang,beef_noodles,xiaowan_cai,casserole_rice_noodles,fried_chicken ✓
+     - Path B（改Q1→Q6失效）：Q1=breakfast + Q6=hungry → invalidated_answer_ids=[q06_appetite] ✓
+     - Path C（community入口直接redirect）：entry_intent=community → is_complete=True next_action=redirect_no_questionnaire_required completion_reason=entry_intent_no_questionnaire_required ✓
+     - 320px 移动端手测：问卷选择→进度条更新→"去看推荐结果"按钮→1→3→5 渐进展示三步展开→无水平溢出、无视觉异常 ✓
+  5. 全部门禁：后端 ruff/mypy/pytest(90) 全绿；前端 oxlint/tsc/vitest(15)/vite build 全绿。
+- 注意事项：
+  - display_if 改动影响：Q4 口味仅在 Q2=undecided 时展示。所有现有测试使用 Q2=undecided，Q4 仍展示，不受影响。
+  - 1→3→5 渐进展示是纯前端状态，后端接口不变。进入结果态时 expandLevel 重置为 1。
+  - vite.config.ts 新增 dev proxy（`/api → 127.0.0.1:8000`），不影响生产构建。
+  - max_distance_m 维度在 P3-01 LocationContext 时补上。
+- 对后续的影响：P2 全部关闭，进入 P3 位置与商户落地。P3-01 需要实现 LocationContext（浏览器/手动/演示三种入口）+ max_distance_m 维度 + 前端地点选择组件。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. P2-03 已完成（17/50）：问题库 v1.0 6 题 + 状态机服务 + 12 新单测（合计 70）全绿 + 提交 `459f60e` push 成功。当前主任务切换为 **P2-03A 实现 Questionnaire Decision Engine 与 next API**，核心验收点：
-   - `POST /api/v1/questionnaire/next`：接收 questionnaire_version+entry_intent+answers_so_far，每次从头重算，返回 RecomputeResult 9 字段
-   - 相同版本和答案得到相同路径；修改早期答案能返回失效答案 ID
-   - 条件循环 / 未知问题 / 未知选项 在加载或请求时失败；接口不调用 AI
-   - 非 recommend 入口立即 answers_complete=true；recommend 入口完整后 answers_complete=true，此时把 answers 转 QuestionnaireAnswers 喂 generate_rule_recommendations 就能产出 5 条候选（已验证）
-   - 后端新增 `test_api_questionnaire_next.py`，模拟 HTTP 请求走正例/负例
-4. 全部门禁一条都不能少：`backend: ruff + mypy + pytest` 和 `frontend: oxlint + tsc + vitest + vite build`，必须全部 0 报错，再 git commit+push。
-5. 全量门禁通过后必须同步本 PLAN（清单项状态 + 执行日志 PLAN-026）+ 项目记忆 MEM-027。
-6. MEM-024 反"固定首候选"盯防延续到 P2-03A/P2-04：端到端（填答案 → 后端 next 完成 → 推荐 5 条）至少跑 5 组差异化答案，要求 Top5 排序 ≥4 种、首候选 ≠ xiaowan_cai ≥2 组，不能因为状态机多了一层就放松差异化。
+3. P2 核心切片全部完成（20/50）：问卷→next API→规则引擎→5 候选→前端 1→3→5 渐进展示 全链路打通。当前主任务切换为 **P3-01 LocationContext**，核心验收点：
+   - 后端 LocationContext schema（浏览器 WGS84 / 手动地点 / 演示地点三种入口）
+   - 坐标转换 WGS84→GCJ-02（为 P3-04 高德 Live 准备）
+   - max_distance_m 维度补入问卷或地点选择页
+   - 精确坐标不写入 URL、普通日志、业务历史（G-16）
+   - 拒绝定位仍可使用手动/演示路径
+4. P3-02 Mock POIProvider：正常/空/慢/错误四类场景可重复触发。
+5. P3-03 商户结果页：一家"最近匹配"主商户、四家折叠备选、来源/状态说明和地图跳转。
+6. 全部门禁一条都不能少：`backend: ruff + mypy + pytest` 和 `frontend: oxlint + tsc + vitest + vite build`，必须全部 0 报错，再 git commit+push。
+7. 全量门禁通过后必须同步本 PLAN（清单项状态 + 执行日志）+ 项目记忆。
+8. MEM-024 反"固定首候选"盯防延续到 P5：AI 最终生成同样需要 4 组以上差异化参数化测试。

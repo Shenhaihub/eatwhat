@@ -205,4 +205,46 @@ describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsG
     // MEM-024 验证：链路 B 首菜不是小碗菜（是 malatang）
     expect(screen.getByTestId('rec-name-1')).toHaveTextContent('malatang');
   });
+
+  it('4) 1→3→5 渐进展示：初始只可见 1 张卡片 → 点击展开到 3 → 再点击展开到 5', async () => {
+    const user = userEvent.setup();
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        'eatwhat:questionnaire:draft:v1.0:ai_recommend',
+        JSON.stringify(COMPLETE_ANSWERS),
+      );
+    }
+
+    vi.spyOn(apiClient.api, 'questionnaireNext').mockResolvedValue(COMPLETE_RESULT);
+    vi.spyOn(apiClient.api, 'recommendationsGenerate').mockResolvedValue(TOP5_RESPONSE);
+
+    render(<Recommend />);
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
+    );
+
+    await user.click(screen.getByTestId('goto-recommendations'));
+    await waitFor(() => screen.getByTestId('recommendations-list'), { timeout: 3000 });
+
+    // 辅助：统计可见卡片数（hidden 属性 = 不可见）
+    const countVisible = () =>
+      screen
+        .getByTestId('recommendations-list')
+        .querySelectorAll('.recommendation-card:not([hidden])').length;
+
+    // 初始：只展示 priority=1（1 张可见）
+    expect(countVisible()).toBe(1);
+    expect(screen.getByTestId('expand-recommendations')).toHaveTextContent('3/5');
+
+    // 第一次展开 → 3 张可见
+    await user.click(screen.getByTestId('expand-recommendations'));
+    expect(countVisible()).toBe(3);
+    expect(screen.getByTestId('expand-recommendations')).toHaveTextContent('5/5');
+
+    // 第二次展开 → 5 张可见，按钮消失
+    await user.click(screen.getByTestId('expand-recommendations'));
+    expect(countVisible()).toBe(5);
+    expect(screen.queryByTestId('expand-recommendations')).toBeNull();
+  });
 });

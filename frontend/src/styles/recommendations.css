@@ -17,6 +17,15 @@
   gap: var(--space-3);
 }
 
+/* D-008：1→3→5 渐进展示——hidden 卡片必须真正 display:none */
+.recommendation-card[hidden] {
+  display: none;
+}
+
+.expand-recommendations {
+  justify-self: center;
+}
+
 .recommendation-card[data-priority='1'] {
   box-shadow:
     0 0 0 1px color-mix(in oklab, var(--color-primary) 35%, var(--color-border)),

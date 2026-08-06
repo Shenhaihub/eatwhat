@@ -71,7 +71,11 @@
         "is_array": true,
         "value_is_enum_value": true
       },
-      "display_if": {"operator": "always_true"},
+      "display_if": {
+        "operator": "equals",
+        "operand_question_id": "q02_explicit_food",
+        "operand_value": "undecided"
+      },
       "required_for_entry_intents": []
     },
     {
