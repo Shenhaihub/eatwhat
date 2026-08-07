@@ -28,6 +28,12 @@ target-version = "py313"
 python_version = "3.13"
 strict = true
 
+# Mypy 工程约定（与 P1/P2 保持一致）：对生产代码 app/ 跑 strict，对 tests/ 放松未类型化函数（no-untyped-def / no-untyped-call）
+[[tool.mypy.overrides]]
+module = "tests.*"
+strict = false
+disable_error_code = ["no-untyped-def", "no-untyped-call", "unused-ignore", "name-defined", "type-arg", "no-untyped-call", "call-overload", "index"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

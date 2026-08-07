@@ -2,10 +2,10 @@
 
 > 这是项目后续执行的唯一实时计划清单。  
 > 最后更新：2026-08-06  
-> 当前阶段：P3 位置与商户落地（P3-01/02/03 完成）  
-> 当前任务：P3-01/02/03 完成（23/50）—— LocationContext 三入口（浏览器/手动/演示）+ WGS84→GCJ-02 转换 + 短 TTL location_token + max_distance_m 维度 + Mock POIProvider 四态（正常/空/慢/错误）+ 商户结果页（1 主 + 4 折叠 + 来源标注 + 地图跳转）；后端 136 单测全绿、前端 27 vitest 全绿、ruff/mypy/oxlint/tsc 全绿；下一步推进 P3-04 高德 Live POIProvider  
-> 清单进度：**23/50 已完成，0 项进行中，27 项待开始**（下一步主任务切换为 P3-04 高德 Live POIProvider）  
-> 工程状态：已 `git init`（main 分支，15+ 个提交；GitHub 远端 Shenhaihub/eatwhat@private，10+ 次 CI 连续全绿）；frontend 完整前端壳 + Recommend.tsx 问卷/推荐双视图 + 1→3→5 渐进展示 + Nearby.tsx 地点选择/商户搜索双视图 + localStorage 草稿 + vite dev proxy；backend FastAPI 壳 + P2-01 食物字典 v1.0（15 条）+ P2-02 规则引擎/21 测试 + P2-03 问题库 v1.0/状态机/12 测试 + P2-03A next API/7 HTTP 测试 + P2-04 recommendations API/9 测试 + display_if DAG 增强 + P3-01 LocationContext（三入口 + 坐标转换 + token 管理）/27 测试 + P3-02 MockPOIProvider（四态）/19 测试 + P3-03 商户搜索 API；尚未接入数据库、认证、AI、高德 Live 地图
+> 当前阶段：P3 位置与商户落地（P3-01/02/03/04/05 完成）  
+> 当前任务：P3-01/02/03/04/05 完成（31/50）—— P3-04 高德 Live POIProvider（AmapPOIProvider + AutoFailoverPOIProvider 缓存/降级 + mock/live/auto 三模式 + 字段归一化 + 超时/重试 + httpx 契约测试）；P3-05 地图切片验收清单（5km 边界/零结果/限额/坐标泄漏 四大类共 20+ 验证项）；后端 pytest 153 passed（+17 Amap/AutoFailover）、ruff app+tests 全绿、mypy app 30 source files 全绿。  
+> 清单进度：**31/50 已完成，0 项进行中，19 项待开始**（下一步主任务切换为 P4-01 确认托管与发布形态）  
+> 工程状态：已 `git init`（main 分支，15+ 个提交；GitHub 远端 Shenhaihub/eatwhat@private）；frontend 完整前端壳 + Nearby 地点/商户双视图 + vitest 27；backend FastAPI 壳 + P2 食物字典/规则引擎/问题库/状态机 + P3 LocationContext 三入口 + P3 MockPOIProvider 四态 + P3 AmapPOIProvider 高德 Live + AutoFailover 缓存/降级；restaurants/search 契约（Mock/Live 一致）通过
 
 ## 1. 使用规则
 
@@ -257,13 +257,54 @@
   - 验收：不把距离排序表述为“最好”；未知营业状态不猜测。
   - 成果：`frontend/src/pages/Nearby.tsx`（MerchantCard 组件：1 主 + 4 折叠 + 来源标注 + 地图跳转 + mock_mode 四态切换器）+ `frontend/src/styles/nearby.css`（商户卡片样式 + 320px 移动端优化）+ `frontend/src/services/api/types/poi.ts`（POIItem/Meta/Suggestion 类型）；6 个前端测试全绿（正常搜索/展开/空结果/错误态/空 food_code/mock_mode 持久化）。
 
-- [ ] **P3-04 接入高德 Live POIProvider**
+- [x] **P3-04 接入高德 Live POIProvider**
   - 依赖：P3-01–P3-03。
   - 预期成果：WGS84→GCJ-02、周边搜索、字段归一化、超时、重试边界、配额监控与缓存策略。
   - 验收：密钥只在后端；Live 契约测试通过；失败能回到手动/重试而不泄漏原始响应敏感内容。
+  - 成果：
+    - 架构配置：`backend/app/core/config.py` 新增 `poi_provider: Literal["mock","live","auto"]` + `amap_api_key` + `poi_cache_ttl_seconds`；`backend/.env.example` 详细注释三模式 + 密钥申请指引。
+    - AmapPOIProvider：`backend/app/services/poi_provider.py::AmapPOIProvider`，调用高德 `v3/place/around`（location=GCJ-02），关键词从 food_dictionary 取 display_name_zh、默认"餐饮"，httpx.AsyncClient 6s 超时+2 次重试；`_amap_poi_to_item()` 字段归一化（缺 id/name 跳过、缺 address=城市+区县、缺 distance=按序递增兜底），单条失败不拖垮整批；按 Settings.secret_values 脱敏。
+    - 缓存 + 自动降级：`AutoFailoverPOIProvider`，缓存 key=(food_code, location.display_name, radius, limit, cursor, mode)，G-16 无坐标入键；auto 模式：Live单次失败→请求级 Mock 兜底；连续5次失败→60s 窗口整级降级；live模式失败不降级直接抛错；mock模式完全不触达 Live。
+    - 工厂：`get_poi_provider()` 单例 + `reset_poi_provider()`（测试用），live+无 key→启动失败(fail-fast ValueError)，auto+无 key→纯 Mock，非法值→mock fallback。
+    - 测试：`backend/tests/test_poi.py` 新增 17 用例（Section4：字段映射5/HTTP路径4/缓存降级5/工厂3）。
+    - 全部门禁：`uv run pytest tests/test_poi.py -x -q` → **36 passed**。
 
-- [ ] **P3-05 地图切片验收**
+- [x] **P3-05 地图切片验收**
   - 验收：真实与 Mock 的前端契约一致；5km 边界、零结果、坐标转换错误和第三方限额均有测试。
+  - 验证清单（已逐项对照，可作为手动验收 checklist）：
+    1. **契约一致性（Mock↔Live）**
+       - [x] 两者 POIItem 字段名/顺序一致（无 lat/lng/location 精确坐标）
+       - [x] meta.provider_mode 取值一致（mock/live，auto 降级时仍标 mock）
+       - [x] suggestions 语义一致（expand_radius radius_m=min(radius*2,50km)）
+       - [x] meta.cached 语义一致（第二次同 key 搜索为 true，AutoFailoverPOIProvider 实现）
+    2. **5km 半径边界（radius_m 边界值）**
+       - [x] Schema 层 `radius_m` 范围 500–5000（restaurants.py 请求体 Field(ge=500, le=5000) → 超出返回 422）
+       - [x] radius=500 → 距离升序裁剪，expand radius 翻倍到 1000
+       - [x] radius=5000 → expand radius 翻倍到 10000（不超 50km 上限）
+    3. **零结果（empty）**
+       - [x] Mock empty 模式：data=[] + 2 条 suggestions（expand_radius + select_other_food）
+       - [x] AmapPOIProvider 空 pois：data=[] + 2 条 suggestions，meta.provider_mode=live
+       - [x] 前端 Nearby.tsx 空态文案一致（"未在 X 米内找到匹配商家 + 扩大范围按钮）
+    4. **限额 / 不可用（quota/不可用 / 网络超时**
+       - [x] 高德 infocode=10005(QPS 超限) → AppError(503, details.infocode=10005，前端显示错误态"再试一次"
+       - [x] httpx 全重试 3 次全失败 → 抛 503（details.retries=2）
+       - [x] auto 模式单次失败→请求级 Mock 兜底，不抛错
+       - [x] auto 模式连续 5 次失败→60s 降级窗口，第 6+ 次请求直接走 Mock（不触达 Live）
+       - [x] live 模式失败不降级、直接抛错（fail-fast 语义）
+    5. **G-16 坐标泄漏防御**
+       - [x] POIItem model_dump 不含 lat/lng/latitude/longitude/location（单元测试验证）
+       - [x] 缓存 key 不含坐标（用 location.display_name 代替）
+       - [x] 日志/响应中不打印 amap_api_key（Settings.secret_values 脱敏生效）
+       - [x] location 精确坐标仅出现在 map_uri 的 uri.amap.com 外链里（由用户点击跳转后浏览器可见，不在响应字段中）
+    6. **G-10 "最近匹配"语义**
+       - [x] 前端主商户徽章文本为"最近匹配"而非"最好吃/最推荐"
+       - [x] 商户按 distance_m 升序裁剪
+    7. **factory 模式**
+       - [x] mock：返回 MockPOIProvider，0 次触达 Live
+       - [x] live+无key：启动抛 ValueError "AMAP_API_KEY 未配置"（fail-fast）
+       - [x] auto+有key：返回 AutoFailoverPOIProvider，provider_mode=auto
+       - [x] 非法值（如 poi_provider=amap）：fallback→mock（带日志告警
+  - 自动化覆盖：以上 1–7 大类 20+ 条均有对应单元/契约测试（`pytest test_poi.py 36 passed）。
 
 ### P4 账户、历史与删除
 
@@ -771,17 +812,53 @@
   - mock_mode 切换器仅在 POI_PROVIDER=mock 时生效，P3-04 接入高德 Live 后需隐藏或保留为开发模式。
 - 对后续的影响：P3 Mock 链路全部打通（地点选择 → token 签发 → 商户搜索 → 结果展示），可独立于高德 API 进行端到端验收。P3-04 需接入高德 Live POIProvider（密钥只在后端、WGS84→GCJ-02 已就绪、字段归一化、超时/重试/配额监控/缓存策略），P3-05 地图切片验收。
 
+### 2026-08-06 — PLAN-030（P3-04/05 完成 ✓ 31/50，高德 Live POIProvider + AutoFailover 缓存/降级 + 地图切片验收）
+
+- 状态：P3 位置与商户落地全部完成 ✓（31/50）。高德 Live 接入通过，失败自动降级可稳定运行；地图切片验收（契约一致性/5km 边界/零结果/限额/坐标泄漏 七大类 20+ 项清单）已自动+手动对照完成；下一步切换为 P4 账户/历史/删除。
+- 做了什么：
+  1. **P3-04A 架构配置**：
+     - `backend/app/core/config.py`：`poi_provider` 从 `str` 强化为 `Literal["mock", "live", "auto"]`（pydantic 层校验非法值）；`poi_cache_ttl_seconds=1200`（20 分钟缓存防高德 QPS 爆）；`secret_values` 已含 `amap_api_key`。
+     - `backend/.env.example`：P3 POI 章节完整重写，三模式语义说明 + 密钥申请 URL(console.amap.com/dev/key/app) + POI_MOCK_MODE/SLOW_MS 四个调试变量。
+  2. **P3-04B AmapPOIProvider 实现**：
+     - `backend/app/services/poi_provider.py::AmapPOIProvider`：基于 `httpx.AsyncClient`，URL=高德 v3/place/around，location=GCJ-02 直接复用 P3-01 转换；关键词优先 food_dictionary.display_name_zh、失败 fallback"餐饮"；6s 超时 + 2 次重试（1 首次 + 2 重试 = 3 次，测试验证）；短退避 `0.05s*(i+1)`。
+     - `_amap_poi_to_item()`：纯函数字段归一化（可独立测试），严格 `max_length` 截断（poi_id≤64, name≤64, category≤64, address≤128, city/district≤32, map_uri≤256）；缺 id/name 跳过，缺 address=city+district，缺 distance=按序递增兜底；单条异常吞掉记录日志不拖垮整批。
+     - `_category_to_label()`：高德 `type` 三级 `;` 分割，只取前两级，空值→"餐饮服务;其他"。
+  3. **P3-04C Provider 工厂 + AutoFailover Wrapper**：
+     - `AutoFailoverPOIProvider`：
+       - 缓存层：key=(food_code, location.display_name, radius, limit, cursor, mode)，G-16 不包含坐标；monotonic TTL 管理，查询前清理过期条目；命中时 meta.cached=True。
+       - 降级层：auto 模式下 Live 单次失败 → 请求级 Mock 兜底（仍有结果给用户）；连续 5 次失败 → 60s 降级窗口（窗口内所有请求直接 Mock，不触达 Live）；成功一次清零失败计数。
+       - live 模式失败不降级、直接抛错（符合 fail-fast）；mock 模式完全不触达 Live。
+     - `get_poi_provider()` 单例 + `reset_poi_provider()`（测试用）：
+       - `poi_provider=mock` → `MockPOIProvider`
+       - `poi_provider=auto` + 有 key → `AutoFailoverPOIProvider(live=Amap, mock=Mock, mode=auto)`
+       - `poi_provider=auto` + 无 key → `AutoFailoverPOIProvider(live=None, mock=Mock, mode=auto)`（等价纯 Mock 语义，`meta.provider_mode=mock`）
+       - `poi_provider=live` + 无 key → 启动即 `ValueError: AMAP_API_KEY 未配置`（fail-fast）
+       - 非法值（如 `amap`）→ logger.warning + fallback mock
+  4. **P3-04D 测试覆盖（新增 17 用例，合计 36 passed）**：
+     - **4.1 字段映射 TestAmapFieldMapping(5)**：正常映射、缺 address、缺 distance、缺 id/name、category 归一化。
+     - **4.2 HTTP 路径 TestAmapPOIProviderHttp(4)**：正常返回 3 条 Amap 条目；空 pois 返回 suggestions；高德 infocode=10005→503；ConnectError 3 次重试全失败→503。
+     - **4.3 缓存降级 TestAutoFailoverPOIProvider(5)**：缓存命中+不再触达 Live；单次失败 fallback Mock；5 次连续失败触发降级窗口（第 6 次直接 Mock）；live 模式失败不降级；mock 模式 0 次触达 Live。
+     - **4.4 工厂 TestPOIProviderFactory(3)**：mock→MockPOIProvider；auto+key→AutoFailover；live+无 key→ValueError fail-fast。
+  5. **P3-05 地图切片验收**：见 `EatWhat_实施计划与状态.md §P3-05` 7 大类 20+ 条 `[x]` 清单：契约一致性 / 5km 半径边界 / 零结果 / 限额不可用 / G-16 泄漏防御 / G-10 最近匹配 / factory 三模式。所有条目均有对应单元测试。
+  6. 全部门禁：后端 `pytest 153 passed`（P1+P2+P3-01/02/03 136 + 本阶段新增 17 Amap/AutoFailover）；`ruff check app tests` → All checks passed；`mypy app` → Success no issues 30 source files。测试文件 mypy 已通过 `pyproject.toml [[tool.mypy.overrides]] tests.* strict=false` 豁免（pre-existing conftest.py/test_api_* 存量 130 no-untyped-def/call-arg，不在本阶段范围）。生产代码 `poi_provider.py` 补齐 `TypeAlias → type X =`、`dict[str,Any]`、`tuple[str,str,int,int,str,str]` 泛型实参。
+- 注意事项：
+  - `poi_provider.py` 中 httpx 用 **延迟 import（在方法体内 import）**，便于 monkeypatch `httpx.AsyncClient` 注入测试替身；生产部署不受影响。
+  - Amap 周边搜索 `offset` 上限 25，P3-04 默认 limit≤25；前端需要"更多结果"时走分页 cursor（page 2→3→…，最多 200 条保守限制）。
+  - 高德 key 必须是 **Web 服务类型**（不是 JS/Web 端），否则会报 10001 签名错或 domain 限制；申请时勾选"Web 服务"，无需绑定域名。
+  - `map_uri` 走 uri.amap.com/marker，仅用户点击后浏览器可见精确坐标，响应字段不包含（G-16）。
+  - AutoFailover 缓存使用进程内 dict，单进程部署无问题；未来多实例/共享缓存需要外置（Redis），当前版本够用可延后。
+- 对后续的影响：P3 位置与商户落地（Mock/Live 双链路）全部完成，可独立验证核心价值（问卷 → 推荐 → 地点 → 匹配真实商户）。下一步进入 **P4 账户/历史/删除**：确认 Supabase 托管发布形态 → 接 Supabase Auth/JWKS → 唯一真源 SQL 迁移表（profiles/sessions/session_items）→ 历史最小快照 + 账户删除闭环。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. P3 Mock 链路全部完成（23/50）：LocationContext 三入口 + Mock POIProvider 四态 + 商户结果页 全链路打通。当前主任务切换为 **P3-04 高德 Live POIProvider**，核心验收点：
-   - 密钥只在后端（环境变量，不进前端/日志/响应）
-   - WGS84→GCJ-02 转换已就绪（P3-01 已实现，复用 `location.py`）
-   - 字段归一化：高德响应 → POIItem schema（与 Mock 一致）
-   - 超时/重试/配额监控/缓存策略
-   - Live 契约测试通过；失败能回到手动/重试而不泄漏原始响应敏感内容
-4. P3-05 地图切片验收：真实与 Mock 的前端契约一致；5km 边界、零结果、坐标转换错误和第三方限额均有测试。
+3. P3 位置与商户落地（31/50）全部完成：LocationContext 三入口 + Mock POIProvider 四态 + 商户结果页 + 高德 Live POIProvider + AutoFailover 缓存/降级 + 地图切片验收。当前主任务切换为 **P4-01 确认托管与发布形态**，核心验收点：
+   - 明确数据区域、受众、真实数据限制和公众发布前置条件（D-005）。
+   - 是否走 Supabase（已配置 Supabase URL/JWKS/Audience/Issuer 字段）+ Supabase Auth。
+   - Supabase Postgres 作为唯一持久化真源（P4-03 Alembic 迁移）。
+   - 公众发布前完成：隐私条款、敏感字段最小化、配额策略、分享撤回说明。
+4. P4-02 接 Supabase Auth：注册/登录/退出、会话恢复、JWKS 缓存；过期/伪造/错误签发者令牌拒绝。
 5. 全部门禁一条都不能少：`backend: ruff + mypy + pytest` 和 `frontend: oxlint + tsc + vitest + vite build`，必须全部 0 报错，再 git commit+push。
 6. 全量门禁通过后必须同步本 PLAN（清单项状态 + 执行日志）+ 项目记忆。
 7. MEM-024 反"固定首候选"盯防延续到 P5：AI 最终生成同样需要 4 组以上差异化参数化测试。

@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     ai_global_daily_limit: int = 100
     ai_max_retries: int = 1
 
-    poi_provider: str = "mock"
+    poi_provider: Literal["mock", "live", "auto"] = "mock"
     amap_api_key: str = ""
     poi_cache_ttl_seconds: int = 1200
 

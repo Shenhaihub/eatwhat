@@ -613,3 +613,66 @@ P1-01~P2-01 已完成（15/50）；提交链：`8248b5f → 846bee1 → d1dfdba 
   - P2-03A 新增测试：请求体传了 `source_type` 必须 400（守住 G-07，对应 MEM-025 的约束）；`entry_intent` 非法值 `bogus_entry` 必须 422/400（状态机 recompute 会抛 ValueError，路由层要统一转成 HTTP 错误码）。
   - P2-04（推荐展示）若要串起状态机→规则引擎，只需要在 answers_complete=true 时把 valid_answered_question_ids 对应的答案转成 QuestionnaireAnswers（注意把空多选的 tastes/avoidances 转 None 而不是 []，rule_engine 里对 None 走默认），然后调用 generate_rule_recommendations 即可——后端纯函数链路已打通，只差 20 行胶水代码。
 - 下一次继续：P2-03A Questionnaire Decision Engine 与 next API（FastAPI 路由包装状态机 + 正例负例 HTTP 测试）；完成后直接接 P2-04 核心切片验收（状态机→规则→5 条候选端到端跑通 5 组差异化答案，保持 MEM-024 反小碗菜恒第一）。
+
+### 2026-08-06 — MEM-027（P3-01 LocationContext 三入口 + WGS84→GCJ-02 + location_token 内存 TTL 完成）
+
+- 硬约束（G-16 贯穿 P3 全局，所有后续 P3 子任务继承）：
+  1. 精确坐标（lat/lng_gcj02 原始数值）绝不进任何业务响应字段、绝不进日志、绝不进 URL path/query、绝不进 localStorage。
+  2. 坐标在内存中使用 **不透明 location_token**（由 `LocationTokenStore.issue()` 签发 32 位十六进制字符串，TTL=30 分钟）作为前后端唯一沟通凭证。
+  3. token 存储：后端进程内存 dict，不写磁盘/DB。未登录用户可用——符合 G-13。
+- 坐标转换：WGS84 → GCJ-02 标准偏移算法（纬度 `transformLat`、经度 `transformLon`、椭圆 Krasovsky 1940 参数 a/e²），为高德 Live 准备；转换纯函数 100% 可测（test_location.py 27 用例覆盖三入口+逆地理+搜索+demo+过期+非法 token）。
+- 三入口契约：浏览器 reverse（/locations/reverse）、关键词搜索（/locations/search，demo 版本返回候选列表）、演示地点（/locations/demo 5 个武汉预设点 + /demo/{code}/select）。三种入口产出的 LocationContext schema 完全一致，下游 POI 调用无感。
+- max_distance_m 维度（前端选择）：500/1000/3000/5000 四档，默认 1000。直接作为 radius_m 传给 restaurants/search。
+
+### 2026-08-06 — MEM-028（P3-02 MockPOIProvider 四态 + P3-03 商户结果页 完成，23/50）
+
+- MockPOIProvider 四态（normal/empty/slow/error）的接口设计是 P3-04 Live 的基线；Live 上线后四态仍保留用于 UI 验收，mock_mode 请求参数和 POI_MOCK_MODE 环境变量两套入口必须长期保留**不可删除**（D-001/D-005）。
+- 商户结果页前端 Nearby.tsx 的 1 主 + 4 折叠交互规范（主商户 isPrimary 高亮、"最近匹配"徽章、map_uri 跳转高德 URI Scheme）是 P3 最终视觉形态，Live 接入时只改数据不改结构——与 Mock 契约 1:1 对齐（P3-05 验收核心）。
+- G-10 反宣传语言约束（P3-03 + P3-04 继承）：
+  - 商户卡片绝对不能出现"最好吃/最推荐/评分最高/必吃"等主张。
+  - 唯一允许的徽章词是"最近匹配"，对应规则：按 distance_m 升序排列后取 priority=1。
+  - 未知营业状态：不显示"营业中/打烊"字段，不得猜测。
+
+### 2026-08-06 — MEM-029（P3-04 高德 Live 接入的关键决策：mock/live/auto 三模式 + AutoFailover 缓存降级）
+
+- **POI_PROVIDER 模式三选一**（Settings.poi_provider: Literal["mock", "live", "auto"]，pydantic 层强校验，默认 mock，.env.example 推荐 auto）：
+  1. `mock`：完全不触达高德，0 网络调用，适合 UI 验收、CI、无网络环境。
+  2. `auto`：有 `AMAP_API_KEY` → 优先 Live；Live 单次失败→当前请求立刻降级 Mock；连续 5 次失败→进入 60s 降级窗口（所有请求直走 Mock，不触达 Live）；Live 一次成功即清零失败计数。
+  3. `live`：强制 Live；`AMAP_API_KEY` 为空启动直接 ValueError 报错（fail-fast，不允许悄悄降级导致用户误以为连到高德）。
+- **AutoFailoverPOIProvider 缓存键必须不含坐标**（G-16）：使用 `location.display_name` 作为 location 维度标识；若 P3-01 将来支持同名不同坐标，可追加 location_token 的 hash 前缀——当前 display_name 足够。
+- **httpx monkeypatch 最佳实践**：AmapPOIProvider._get_with_retry 中使用 `import httpx` **延迟导入**（方法体内 import，不要在模块顶层 import），这样 pytest monkeypatch.setattr("httpx.AsyncClient", factory) 能覆盖到真实调用路径；否则如果顶层 `import httpx` 并保存引用，monkeypatch 会失效。
+- **高德 Web 服务 vs JS/Web 端密钥类型区分**（长期踩坑预防）：
+  - 必须选控制台的 **Web 服务**（不是 JS API/Web 端）。
+  - Web 服务密钥无域名白名单、直接 IP 白名单可选；JS 密钥受域名绑定会直接返回 infocode=10001（签名/域名错误）。
+  - 申请入口：https://console.amap.com/dev/key/app → 创建应用 → 添加 Key → 服务平台 = Web 服务。
+- **字段归一化兜底顺序**（高德响应字段大量缺失的长尾情况）：
+  1. 缺 `id` 或 `name` → 整条丢弃（不进响应）。
+  2. 缺 `address` → `cityname + adname`（如"武汉市洪山区"），再空就"地址不详"。
+  3. 缺 `distance` → 第 i 条 fallback = min(radius_m, (i+1)* ⌈radius_m/limit⌉, 50) 递增，保证距离字段单调递增。
+  4. 缺 `cityname`/`adname` → LocationContext.city_name/district_name 兜底（绝不让响应 city/district 为空）。
+- **周边搜索参数**（高德 v3/place/around）：
+  - `location`：GCJ-02 逗号分隔"lng,lat"，P3-01 产出直接可用，无需二次转换。
+  - `radius`：直接用前端 radius_m（500~5000，schema 层已经硬限制）。
+  - `extensions=base`：不拿详情（高德 all 扩展返回营业时间/平均消费等大量信息，当前 schema 不用，省带宽+省配额）。
+  - `offset≤25`（高德上限）；前端 limit>25 时走分页（page=1→cursor="2"→page=2…→ 保守上限 200 条 = page * offset < 200）。
+  - `keywords`：优先 food_dictionary.display_name_zh，没有则 fallback "餐饮"（不能传空，传空高德 around 返回任何类型 POI，匹配不到餐厅）。
+
+### 2026-08-06 — MEM-030（P3-05 地图切片验收 checklist 固化 + 测试基座固定结构）
+
+- P3-05 的 7 大类 20+ 条人工验收 checklist 已全部写入 `EatWhat_实施计划与状态.md §P3-05`，每条都对应单元/契约测试（test_poi.py Section 4 新增 17 用例），后续 P4/P5 迭代回归必跑：
+  1. 契约一致性（Mock↔Live）：POIItem 字段/顺序/严格性对齐。
+  2. 5km 边界：radius_m 500/5000 + expand_radius 翻倍语义。
+  3. 零结果：Mock empty 模式 + Amap pois=[] 都返回 suggestions（expand_radius + select_other_food）。
+  4. 限额不可用：infocode=10005 / 全重试失败 → 503；auto 模式兜底 Mock。
+  5. G-16 泄漏防御：响应字段/缓存键/日志绝不含 lat/lng/location。
+  6. G-10 最近匹配：徽章文案 + distance_m 升序裁剪。
+  7. Factory 三模式：mock→MockPOIProvider / auto+key→AutoFailover / live+无key→启动 ValueError。
+- **固定测试基座结构**（Section 4 结构作为后续所有模块单元测试模板）：
+  - Section 4.1 纯函数映射（最高优先级，可独立测试，无 IO）。
+  - Section 4.2 外部 IO 路径（monkeypatch/fake）。
+  - Section 4.3 Wrapper/组合层（缓存/降级/策略）。
+  - Section 4.4 工厂/Settings 行为。
+- 本 MEM 之后所有 P4 接入 Supabase/Auth 时，G-16/G-10 的继承关系不变：
+  - 精确坐标（用户选择的经纬度）**绝不写 Supabase**（P4-03 迁移表设计时必须删除任何 lat/lng/coordinates 字段——历史最小快照只保存 location.display_name、city、district 三字段即可满足展示）。
+  - 商户（POI）信息 P4-04 明确"只在用户明确点击'保存该商户/分享'时保存 poi_id，不保存浏览过的全部商户列表"——已在 P2 收尾时 P4-04 计划内明文。
+- 下一次继续：P4-01 确认托管与发布形态（Supabase 已配置字段但未实装，下一步用它还是别的；D-005：数据区域/受众/真实数据限制/公众发布前置条件）。
