@@ -71,3 +71,11 @@ export {
   type RestaurantSearchResponseV1,
   type RestaurantSearchSuggestion,
 } from './poi';
+export {
+  type HistoryDeleteAllResponse,
+  type HistoryItemSnapshot,
+  type HistoryListResponse,
+  type HistoryLocation,
+  type HistoryRecord,
+  type HistoryWriteRequest,
+} from './history';

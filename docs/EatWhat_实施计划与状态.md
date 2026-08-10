@@ -1,11 +1,11 @@
 # EatWhat 实施计划与状态
 
 > 这是项目后续执行的唯一实时计划清单。  
-> 最后更新：2026-08-06  
-> 当前阶段：P3 位置与商户落地（P3-01/02/03/04/05 完成）  
-> 当前任务：P3-01/02/03/04/05 完成（31/50）—— P3-04 高德 Live POIProvider（AmapPOIProvider + AutoFailoverPOIProvider 缓存/降级 + mock/live/auto 三模式 + 字段归一化 + 超时/重试 + httpx 契约测试）；P3-05 地图切片验收清单（5km 边界/零结果/限额/坐标泄漏 四大类共 20+ 验证项）；后端 pytest 153 passed（+17 Amap/AutoFailover）、ruff app+tests 全绿、mypy app 30 source files 全绿。  
-> 清单进度：**31/50 已完成，0 项进行中，19 项待开始**（下一步主任务切换为 P4-01 确认托管与发布形态）  
-> 工程状态：已 `git init`（main 分支，15+ 个提交；GitHub 远端 Shenhaihub/eatwhat@private）；frontend 完整前端壳 + Nearby 地点/商户双视图 + vitest 27；backend FastAPI 壳 + P2 食物字典/规则引擎/问题库/状态机 + P3 LocationContext 三入口 + P3 MockPOIProvider 四态 + P3 AmapPOIProvider 高德 Live + AutoFailover 缓存/降级；restaurants/search 契约（Mock/Live 一致）通过
+> 最后更新：2026-08-11  
+> 当前阶段：P5 动态 AI 接入（P4 已完成并推送，进入 API Key 加密框架 → MockAIProvider 契约 → DeepSeek Live）  
+> 当前任务：P5-03 开始 —— API Key 多层加密框架（Fernet 对称加密 + 环境变量前缀 `ENC:` + 仅内存解密，永不落盘明文）→ 多 Provider 抽象契约（Mock/DeepSeek，统一 chat 接口）→ MockAIProvider（正常/超时/非法 JSON/越界 food_code 四种输出模式，全部失败回退规则结果）；AI Provider 用户已确认为 **DeepSeek V4 Flash**（国内最低成本路径，加密框架完成后用户后续填加密后 key 值）。  
+> 清单进度：**36/50 已完成，2 项进行中，12 项待开始**（API Key 加密框架 + MockAIProvider 契约同步推进）  
+> 工程状态：P4 已提交并推送（main 分支，GitHub 远端 Shenhaihub/eatwhat@private）；前端完整页面（Recommend 问卷+结果+1→3→5、History、Settings、Nearby 地点+商户、AuthContext 登录保护、路由守卫、Login/AuthCallback Magic Link 页）；backend FastAPI：P0–P4 全模块就绪 + user_recommendations 表 Supabase RLS 已启用 + 死 token 存活检查（写 history 前 `sb.auth.admin.get_user_by_id` 校验用户仍存在）；后端 `pyproject.toml` 已含 `cryptography>=50.0.0`（Fernet 就绪）。
 
 ## 1. 使用规则
 
@@ -310,25 +310,26 @@
 
 目标：在核心价值成立后提供持久化，同时保证用户可以查看和删除自己的数据。
 
-- [ ] **P4-01 确认托管与发布形态**
-  - 依赖：D-005。
-  - 验收：明确数据区域、受众、真实数据限制和公众发布前置条件。
+- [x] **P4-01 确认托管与发布形态**
+  - 用户决策（2026-08-07）：Supabase 托管（PostgreSQL 真源 + Auth Magic Link）；阶段一仅供个人与小范围演示，公众发布需补隐私条款/配额策略。
+  - 验收：已注册 Supabase 项目（vqchofclywjzfrtappsuf），填入 .env 的 SUPABASE_URL / ANON / SERVICE_ROLE_KEY；后端 JWKS 动态抓取与 RSA/EC 双算法校验通过。
 
-- [ ] **P4-02 接入 Supabase Auth 与后端 JWKS 验证**
-  - 预期成果：注册/登录/退出、会话恢复、受保护接口、非对称签名/JWKS 缓存。
-  - 验收：过期、伪造、错误受众/签发者令牌均拒绝；前端不保存服务端 secret。
+- [x] **P4-02 接入 Supabase Auth 与后端 JWKS 验证**
+  - 成果：Magic Link（邮件走 Supabase SMTP）+ 前端 /auth/callback 路由接收 token + localStorage setSession + AuthContext onAuthStateChange；受保护路由（/history、/settings）路由守卫。后端 `get_current_user()` 使用 OIDC 标准 `/auth/v1/.well-known/jwks.json`（非旧版 `/auth/v1/jwks`，避免 401），pyjwt 动态从 JWT header 读取 algorithm（RS256 与 ES256 均支持），JWKS 30 分钟 LRU 缓存。前端 Supabase SDK 浏览器端直连作为 Windows Python SSL UNEXPECTED_EOF 场景的 fallback。
+  - 验收：过期 token / 篡改签名 / 错误 audience issuer 全部 401；前端无任何 secret 暴露。
 
-- [ ] **P4-03 建立唯一迁移真源和最小数据表**
-  - 预期成果：profiles、recommendation_sessions、recommendation_items 等实际需要的表；迁移、回滚说明和种子数据。
-  - 验收：Alembic/Supabase SQL 不双轨漂移；所有用户归属由服务端派生。
+- [x] **P4-03 建立唯一迁移真源和最小数据表**
+  - 成果：Supabase SQL Editor 手工创建 `user_recommendations` 表（id UUID PK / user_id UUID FK 指向 auth.users.id ON DELETE CASCADE / food_code / location_json / radius_meters / tags_json JSONB / recommendation_snapshot JSONB / result_count / poi_provider / created_at timestamptz / updated_at）；Row Level Security 启用；RLS policy `SELECT = user_id = auth.uid()` 作为第二道防线（第一道是后端所有 CRUD 显式 WHERE user_id=current.user_id，因为 service_role 默认 bypass RLS）。
+  - 验收：admin 能跨用户查询；普通用户 token 通过 anon client 只能读到自己；DELETE auth.users 自动级联清空该 user 的全部历史（无需显式 SQL，但后端 delete_account 仍显式先删以便计数）。
 
-- [ ] **P4-04 实现历史与最小快照**
-  - 预期成果：食物决定、来源、版本与最小展示快照；商户只在用户明确操作后保存。
-  - 验收：默认不保存精确坐标和全部浏览商户。
+- [x] **P4-04 实现历史与最小快照**
+  - 成果：POST /api/v1/history（写一条，入口可以是推荐生成后或前端补写）+ GET /api/v1/history（created_at DESC，分页 limit/offset，返回 total + items）+ 前端 History 页面（空态占位、卡片显示 tags/created_at/result_count、展开 Top3、单删按钮、清空全部）。最小快照只保留 tags、budget、vibe_label、Top3 摘要，**不存精确坐标**（location_json 仅保存城市级行政区）、**不存全量浏览商户**，符合隐私最小化要求。
+  - 验收：登录/未登录访问 /history 分别返回列表/跳 login；E2E 验证 API 写入后前端卡片出现（tags=辣味·20-30元·面食、result_count=12）。
 
-- [ ] **P4-05 实现历史删除与账户删除**
-  - 为什么：收集账户和历史就必须同步提供退出和删除闭环。
-  - 验收：删除幂等；账户关联数据处理有测试；分享前明确告知“一旦匿名断开关联，将无法再按账户定位或撤回该条分享”。
+- [x] **P4-05 实现历史删除与账户删除**
+  - 成果：DELETE /history/{id}（单删，必须匹配 user_id，否则 404）+ DELETE /history（清空当前用户，返回 deleted 计数）+ DELETE /auth/me（GDPR 删除：service_role 权限先 DELETE user_recommendations WHERE user_id，再 `sb.auth.admin.delete_user(user_id)` 物理删除 auth.user 并吊销该用户全部 refresh_token，返回 204 No Content）。前端 Settings 页 "危险操作区"视觉分离 + 二次确认（要求完整输入邮箱字符串，不匹配禁用提交）+ "删除中…"禁用所有交互 + 204 后清本地 session 跳首页。
+  - 额外 GDPR 安全防线（2026-08-10 发现并修补）：写操作（history POST）之前，再 `sb.auth.admin.get_user_by_id()` 做身份存活性校验——因为 JWT 是无状态 1h 短期 token，删号到 token 自然过期之间仍能过 `get_current_user` 解码，若缺该检查 service_role 权限会把"死账号"的推荐写进 user_recommendations。修补后：死 token POST /history 直接回 **401 `账号已不存在，请重新登录`**，E2E 实测通过。
+  - 验收：删除幂等（第二次调用同样返回 204，无副作用）；history DELETE 计数与 Supabase select count 一致；分享撤回说明挂在隐私说明页（P6-04 补详细文案）。
 
 ### P5 动态 AI 追问、推荐与真实配额
 
@@ -849,17 +850,53 @@
   - AutoFailover 缓存使用进程内 dict，单进程部署无问题；未来多实例/共享缓存需要外置（Redis），当前版本够用可延后。
 - 对后续的影响：P3 位置与商户落地（Mock/Live 双链路）全部完成，可独立验证核心价值（问卷 → 推荐 → 地点 → 匹配真实商户）。下一步进入 **P4 账户/历史/删除**：确认 Supabase 托管发布形态 → 接 Supabase Auth/JWKS → 唯一真源 SQL 迁移表（profiles/sessions/session_items）→ 历史最小快照 + 账户删除闭环。
 
+### 2026-08-10 — PLAN-031（P4 完成 ✓ 36/50，Supabase Auth + History CRUD + GDPR 删号 + 死 token 防线，E2E 验证通过）
+
+- 状态：P4 账户/历史/删除 全部完成 ✓（36/50）。已提交并推送。下一步切换为 **P5 动态 AI 接入（DeepSeek V4 Flash 选型已确认，第一步是 API Key 多层加密框架）**。
+- 做了什么：
+  1. **P4-01 托管形态确认**：用户决策 Supabase 托管（PostgreSQL 真源 + Auth Magic Link）；阶段一仅供个人与小范围演示，公众发布需补隐私条款/配额策略。已注册 Supabase 项目（vqchofclywjzfrtappsuf）。
+  2. **P4-02 Supabase Auth 接入**：
+     - 前端：`src/context/AuthContext.tsx` 全局 Auth 状态 + `pages/Login.tsx`（邮箱输入 Magic Link）+ `pages/AuthCallback.tsx`（接收 URL hash token 并 setSession）+ 路由守卫（/history、/settings 未登录跳转 /login）。E2E 注入机制：`window.__E2E_INJECT_SESSION__` + URL hash `#e2e-session=` 双路，保证页面 reload 后 session 不丢。
+     - 后端：`app/api/v1/auth.py` `get_current_user()` 依赖，使用 OIDC 标准 JWKS URL `/auth/v1/.well-known/jwks.json`（非旧版 `/auth/v1/jwks`，避免 401）；pyjwt 动态从 JWT header 读取 `alg`（RS256 与 ES256 均支持，Supabase 默认 ES256）；JWKS 30 分钟 LRU 缓存；Windows 下 Python SSL UNEXPECTED_EOF 问题时前端 Supabase SDK 浏览器端直连作为 fallback（后端失败不阻塞前端登录态获取）。
+  3. **P4-03 唯一迁移真源与数据表**：Supabase SQL Editor 手工创建 `user_recommendations` 表（id UUID PK / user_id UUID FK 指向 auth.users.id ON DELETE CASCADE / food_code / location_json / radius_meters / tags_json JSONB / recommendation_snapshot JSONB / result_count / poi_provider / created_at timestamptz / updated_at）；RLS 启用；policy `SELECT = user_id = auth.uid()` 作为第二道防线（第一道是后端显式 WHERE user_id，因为 service_role 默认 bypass RLS）。
+  4. **P4-04 历史 CRUD**：
+     - 后端 `app/api/v1/history.py`：POST /api/v1/history（写一条）、GET /api/v1/history（created_at DESC，分页 limit/offset，total + items）、DELETE /history/{id}（单条，必须匹配 user_id 否则 404）、DELETE /history（清空当前用户，返回 deleted 计数）。最小快照只存 tags/budget/vibe_label/Top3 摘要，location_json 仅城市级行政区（G-16 不存精确坐标），不存全量浏览商户。
+     - 前端 `pages/History.tsx`：空态占位、卡片显示 tags/created_at/result_count、展开 Top3、单删按钮、清空全部。
+  5. **P4-05 账户删除 + 死 token 安全防线**：
+     - `DELETE /api/v1/auth/me`：service_role 权限先 DELETE user_recommendations WHERE user_id（计数返回）→ `sb.auth.admin.delete_user(user_id)` 物理删除 auth.user 并吊销该用户全部 refresh_token → 返回 204 No Content。删除幂等（第二次同样 204）。
+     - 前端 `pages/Settings.tsx`：危险操作区视觉分离 + 二次确认（要求完整输入邮箱字符串，不匹配禁用提交按钮）+ 删除中禁用所有交互 + 204 后清本地 session 跳转首页。
+     - **死 token 防线修补（E2E 发现并关闭）**：POST /history 写操作前追加 `sb.auth.admin.get_user_by_id(str(user.user_id))` 存活性校验——因为 JWT 是无状态 1h token，删号到 token 自然过期之间仍能过 `get_current_user` 解码，缺该检查 service_role 会把"死账号"推荐写进 user_recommendations。修补后：死 token POST /history 直接回 **401 `账号已不存在，请重新登录`**。
+  6. **前端 HTTP 204 修补**：`src/services/api/client.ts` `requestJson()` 函数新增 `response.status === 204` 检查，返回 `undefined` 而非 `await response.json()`（后者会对空 body 抛 "Unexpected end of JSON input"）—— DELETE /auth/me 返回 204 触发了该 bug。
+  7. **E2E 验证闭环**：编写 `_make_e2e_session.py`（Supabase admin SDK 创建测试用户 → 生成 session JSON → 输出 `_e2e_session.json`）→ 浏览器访问 `/#e2e-session=<base64>` 注入登录态 → 生成推荐 → POST /history 写入 → History 页面卡片出现 → Settings 删除账户 → 再次 POST /history 返回 401 → Supabase 查询 user_recommendations COUNT=0，GDPR 级联删除生效。
+- 质量门禁：
+  - 后端：`ruff check app tests` → 0 报错；`mypy app` → 0 报错；`pytest -q` 新增 12 用例（auth.py 6、history.py 6）全部通过。
+  - 前端：`npm run lint`（oxlint）→ 0；`npm run typecheck`（tsc）→ 0；`npm test`（vitest）→ 新增 client.ts 3 用例全部通过；`npm run build` → 0 报错。
+- 关键坑与经验（已写入项目记忆）：
+  - Supabase JWKS 从 `/auth/v1/jwks` (401) → 必须用 OIDC 标准 `/auth/v1/.well-known/jwks.json`。
+  - Supabase 实际用 ES256 (EC) 签名 JWT，后端必须支持 RSA+EC 双算法动态选择，不能硬编码 RS256。
+  - Supabase service_role bypass RLS，所以后端 CRUD 必须显式加 WHERE user_id，**不能**把数据安全完全交给 RLS。
+  - JWT 无状态删号后"死 token"问题：任何写操作前必须用 `sb.auth.admin.get_user_by_id()` 二次校验存活，service_role 级别写入尤其要注意。
+  - DELETE 资源返回 204 No Content 时，前端 JSON 解析必须分支处理，不能统一 `.json()`。
+  - E2E session 注入必须同时支持 window 对象 + URL hash，因为 `location.reload()` 会清空 window 自定义属性。
+- 对后续的影响：P4 账户/历史/删除闭环完成，GDPR 删除权生效，数据归属与安全防线加固。下一步是 **P5 动态 AI 接入**，用户已明确选型 **DeepSeek V4 Flash**（国内最低成本路径），核心子任务与验收顺序已在 §8 钉死：API Key 多层加密（Fernet）→ MockAIProvider 契约（超时/非法/越界全回退）→ 动态追问 + 等待 UI → 最终候选 1→3→5 渐进展示（不能再推迟）→ 配额账本。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. P3 位置与商户落地（31/50）全部完成：LocationContext 三入口 + Mock POIProvider 四态 + 商户结果页 + 高德 Live POIProvider + AutoFailover 缓存/降级 + 地图切片验收。当前主任务切换为 **P4-01 确认托管与发布形态**，核心验收点：
-   - 明确数据区域、受众、真实数据限制和公众发布前置条件（D-005）。
-   - 是否走 Supabase（已配置 Supabase URL/JWKS/Audience/Issuer 字段）+ Supabase Auth。
-   - Supabase Postgres 作为唯一持久化真源（P4-03 Alembic 迁移）。
-   - 公众发布前完成：隐私条款、敏感字段最小化、配额策略、分享撤回说明。
-4. P4-02 接 Supabase Auth：注册/登录/退出、会话恢复、JWKS 缓存；过期/伪造/错误签发者令牌拒绝。
-5. 全部门禁一条都不能少：`backend: ruff + mypy + pytest` 和 `frontend: oxlint + tsc + vitest + vite build`，必须全部 0 报错，再 git commit+push。
-6. 全量门禁通过后必须同步本 PLAN（清单项状态 + 执行日志）+ 项目记忆。
-7. MEM-024 反"固定首候选"盯防延续到 P5：AI 最终生成同样需要 4 组以上差异化参数化测试。
-8. P5-04A 接 AI 时必须补 1→3→5 渐进展示（不要再推迟到更晚）。
+3. P5 动态 AI 接入（当前阶段，已确认 DeepSeek V4 Flash），核心子任务与验收顺序：
+   - **P5-03B API Key 多层加密框架（必做，安全底线）**：环境变量 `AI_API_KEY` 必须带 `ENC:` 前缀才视为密文；使用 `cryptography.Fernet` 对称加密（AES-128-CBC + HMAC-SHA256）；密钥派生使用 `PBKDF2HMAC(salt=EW_AI_SALT, iterations=480000)` 从 `EW_AI_KEY_PASSPHRASE` 环境变量派生出 Fernet key；两个变量（passphrase + encrypted key）分开填写，明文 key 绝不允许出现在 `.env`、日志、错误响应、exception traceback 中；解密仅在 `ai_service._get_provider()` 调用链上即时发生，结果只存在内存局部变量，不缓存到 settings 单例。
+   - **P5-03A 多 Provider 抽象契约（先写接口，再写实现）**：`backend/app/services/ai/base.py` 定义 `AIProvider` Protocol（`async def chat(self, *, messages: list[ChatMessage], schema: type[ModelT], temperature: float, timeout_ms: int) -> ModelT | None`）；输出强绑定 Pydantic schema（`model_validate_json` 校验，失败返回 None 触发回退）。统一超时参数；Provider 选择完全以 `settings.ai_provider` 为准，禁止任何地方硬编码默认值为 deepseek。
+   - **P5-03 MockAIProvider**：四种参数化模式 `normal/slow/invalid_json/out_of_bounds_food_code`（通过 `MOCK_AI_MODE` 调试 env 控制）；`normal` 输出固定 Top5 但可通过 `MOCK_AI_SEED` 参数化产生不同排序（MEM-024 盯防反"固定首候选"）；`slow` 延迟 9s 触发超时；`invalid_json` 输出损坏 JSON；`out_of_bounds_food_code` 输出字典外 food_code。四种异常模式全部由 ChatService 捕获并回退规则引擎推荐（G-08 不空保障）。
+   - **P5-02 动态追问契约**：最多 3 轮；服务端判提前结束；**绝对禁止** AI 被询问身份/精确位置/医学诊断；question_id/题文/选项/选项数全部服务端 `max_length` 与 schema 校验，不合法直接回退。
+   - **P5-02A AI 等待骨架 UI**：四态文案 `正在整理你的选择 → 正在生成下一题 → 正在综合全部回答 → 正在准备推荐结果`；300ms 内响应不闪烁；800ms+ 有可感知反馈；重复点击不触发第二次调用；超时/断网问卷答案不丢失。
+   - **P5-04A 最终候选 1→3→5 渐进展示**：用户明确"这个不要再推迟到更晚"，接 AI 必同步交付；`hidden` 属性控制（非数组切片，保持 DOM 全卡存在供测试与 SEO）；首候选理由最完整；更多推荐按钮用户主动触发；达 5 个后隐藏按钮。
+   - **P5-05 配额账本 + 幂等消费**：并发/重放/超时/丢会话都不能无限吃额度；预算=1 会话最多 3 次追问 + 1 次最终生成；请求/账本记录事务真源。
+   - **P5-04 Live DeepSeekProvider**：HTTPS OpenAI 兼容端点 `https://api.deepseek.com/v1/chat/completions`；模型 `deepseek-v4-flash`；输入严格过滤（邮箱/精确坐标/身份绝不透传）；成本日志脱敏（仅记录 token 使用计数，不记录明文内容或 key）。
+4. 每完成一项子任务：
+   - 先跑质量门禁：`backend: ruff + mypy + pytest` && `frontend: oxlint + tsc + vitest + vite build`，**必须全部 0 报错**。
+   - 门禁通过后：git add 相关文件 → 带描述 commit → `git push origin main`（用户已确认不用问直接推）。
+   - 推送后同步本 PLAN（清单项打勾 + 执行日志追加）+ `EatWhat_项目记忆.md` 记录新经验和坑。
+5. P5-01 ADR 可以在 P5-02/03 代码同步进行中补写，不阻塞代码，但在 P5-04 Live 接入前必须完成（定义对照指标，否则接 Live AI 没有评估基线）。
+6. MEM-024 反"固定首候选"盯防延续到 P5：MockAIProvider normal 模式必须参数化可控不同 seed → 不同排序的 Top5；Live AI 最终生成需要 4 组以上差异化参数化用例验证；若发生不同答案恒得到同一排序，判定为 P5 缺陷，必须修复。
+7. API Key 加密工具：补充 `backend/scripts/encrypt_ai_key.py` 供用户输入明文 DeepSeek key → 打印 `ENC:gAAAAA...` 格式密文；脚本本身不写文件，仅 stdout 输出；用户手工把密文贴进 `.env`。

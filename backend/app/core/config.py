@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     database_url: str = ""
     supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_service_role_key: str = ""
     supabase_jwks_url: str = ""
     supabase_jwt_issuer: str = ""
     supabase_jwt_audience: str = ""
@@ -50,11 +52,15 @@ class Settings(BaseSettings):
 
     @property
     def secret_values(self) -> dict[str, str]:
-        """脱敏过滤器使用的敏感值清单（只含非空值）。"""
+        """脱敏过滤器使用的敏感值清单（只含非空值）。
+        所有非空密钥会被日志 RedactFilter 统一替换为 "***REDACTED***"，
+        禁止任何生产 / 测试日志出现明文。"""
         candidates = {
             "database_url": self.database_url,
             "supabase_url": self.supabase_url,
             "supabase_jwks_url": self.supabase_jwks_url,
+            "supabase_anon_key": self.supabase_anon_key,
+            "supabase_service_role_key": self.supabase_service_role_key,
             "ai_api_key": self.ai_api_key,
             "amap_api_key": self.amap_api_key,
         }

@@ -18,13 +18,18 @@ G-11：不询问医学过敏原，医学过敏原仅从食物字典继承（输�
 from __future__ import annotations
 
 import json
-from typing import Any
+import logging
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from app.api.v1.auth import CurrentUser, get_current_user_optional
+from app.api.v1.history import HistoryWriteRequest, write_user_recommendation
+from app.core.config import Settings, get_settings
 from app.core.exceptions import BAD_REQUEST, INTERNAL_ERROR, NOT_FOUND, AppError
+from app.core.supabase_client import SupabaseAdminClient, get_supabase_admin
 from app.repositories.food_dictionary import (
     DEFAULT_DICTIONARY_VERSION,
     get_food_dictionary_repository,
@@ -110,6 +115,9 @@ def _find_source_type_keys(obj: Any, *, path_prefix: str = "body") -> list[str]:
 @router.post("", response_model=list[RecommendationItem])
 async def recommendations_generate(
     request: Request,
+    current_user: Annotated[CurrentUser | None, Depends(get_current_user_optional)],
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
+    settings: Annotated[Settings | None, Depends(get_settings)] = None,
 ) -> list[dict[str, Any]]:
     # 0) 原始 JSON → 先 G-07 再 Pydantic
     try:
@@ -215,4 +223,60 @@ async def recommendations_generate(
         ) from exc
 
     # 5) 返回正好 5 条（response_model=list[RecommendationItem] 会再兜底校验长度/字段）
-    return [i.model_dump() for i in items]
+    result = [i.model_dump() for i in items]
+
+    # 6) 登录态下自动入库历史（失败静默不影响返回值；单条日志记 warning）
+    if current_user is not None and sb is not None:
+        try:
+            # 从 answers_by_question_id 里尽量提取 food_code
+            food_code = _extract_food_code(payload.answers_by_question_id)
+            # 从 answers 里提取 tags（多选型答案）
+            tags = _extract_tags(payload.answers_by_question_id)
+            snap = {
+                "entry_intent": payload.entry_intent,
+                "questionnaire_version": payload.questionnaire_version,
+                "dictionary_version": dict_version,
+                "items": result,
+            }
+            write_user_recommendation(
+                sb=sb,
+                user=current_user,
+                payload=HistoryWriteRequest(
+                    food_code=food_code,
+                    location=None,
+                    radius_meters=None,
+                    tags=tags,
+                    recommendation_snapshot=snap,
+                    result_count=len(result),
+                    poi_provider=None,
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - 不阻塞主流程
+            log = logging.getLogger("app.api.v1.recommendations")
+            log.warning("history_autowrite_failed user=%s err=%r", current_user.user_id, exc)
+
+    return result
+
+
+def _extract_food_code(answers_by_question_id: dict[str, list[str]]) -> str | None:
+    """答案里找一个像 "菜系/类型" 的单选型问题当 food_code。目前 MVP：取 qid 含 cuisine/type 的第一个值。"""
+    import re
+
+    for qid, vals in answers_by_question_id.items():
+        if re.search(r"(cuisine|type|food_type|cat)", qid) and vals:
+            return vals[0]
+    for vals in answers_by_question_id.values():
+        if len(vals) == 1 and vals[0]:  # 单选题作为弱推断
+            return vals[0]
+    return None
+
+
+def _extract_tags(answers_by_question_id: dict[str, list[str]]) -> list[str]:
+    """把所有多选型答案（长度 >= 2）的选项值拼成 tags，便于后续检索历史。"""
+    tags: list[str] = []
+    for vals in answers_by_question_id.values():
+        if isinstance(vals, list) and len(vals) >= 2:
+            for v in vals:
+                if isinstance(v, str) and v and v not in tags:
+                    tags.append(v)
+    return tags

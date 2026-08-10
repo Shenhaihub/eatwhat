@@ -2,12 +2,17 @@
  * API 客户端骨架。
  * - 统一基础路径（来自 VITE_API_BASE_URL，默认 /api/v1）；
  * - 统一 JSON 请求与错误解析（对齐后端统一错误结构）；
- * - P2 起在此之上补充认证头、幂等键与业务请求。
+ * - 自动携带 Supabase access_token（Authorization: Bearer），由 AuthContext 注入；
+ * - P2 起在此之上补充幂等键与业务请求。
  */
 
 import type {
   DemoLocationListResponse,
   DemoLocationSelectResponse,
+  HistoryDeleteAllResponse,
+  HistoryListResponse,
+  HistoryRecord,
+  HistoryWriteRequest,
   LocationReverseRequestV1,
   LocationReverseResponseV1,
   LocationSearchRequestV1,
@@ -19,8 +24,10 @@ import type {
   RestaurantSearchRequestV1,
   RestaurantSearchResponseV1,
 } from './types';
+import { createAccessTokenGetter } from '../../context/AuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
+const _getAccessToken = createAccessTokenGetter();
 
 interface ApiErrorBody {
   error?: {
@@ -58,10 +65,12 @@ interface RequestOptions {
 
 export async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {}, signal } = options;
+  const token = _getAccessToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -81,6 +90,12 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
       // 非 JSON 响应体，保留默认错误信息
     }
     throw new ApiError(response.status, message, code, requestId);
+  }
+
+  // 204 No Content（例如 DELETE /auth/me、DELETE /history/:id）
+  // 按标准是无响应体，直接返回，避免 .json() 抛 "Unexpected end of JSON input"
+  if (response.status === 204) {
+    return undefined as unknown as T;
   }
 
   return (await response.json()) as T;
@@ -187,5 +202,59 @@ export const api = {
     options?: Omit<RequestOptions, 'method' | 'body'>,
   ): Promise<RestaurantSearchResponseV1> {
     return api.post<RestaurantSearchResponseV1>('/restaurants/search', request, options);
+  },
+
+  // -------- 推荐历史（P4-03） --------
+  /**
+   * P4-03：GET /history
+   * 当前用户的推荐历史（created_at DESC 分页）。需要登录。
+   */
+  historyList(
+    params: { limit?: number; offset?: number } = {},
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<HistoryListResponse> {
+    const q = new URLSearchParams();
+    if (params.limit != null) q.set('limit', String(params.limit));
+    if (params.offset != null) q.set('offset', String(params.offset));
+    const query = q.toString();
+    return api.get<HistoryListResponse>(`/history${query ? `?${query}` : ''}`, options);
+  },
+
+  /**
+   * P4-03：POST /history
+   * 前端一般不用手动调，后端 /recommendations 登录后会自动写。
+   * 仅在前端离线/补录场景下使用。
+   */
+  historyCreate(
+    request: HistoryWriteRequest,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<HistoryRecord> {
+    return api.post<HistoryRecord>('/history', request, options);
+  },
+
+  /**
+   * P4-03：DELETE /history/{id}
+   * 删除单条历史（不归你的会 404）。
+   */
+  historyDelete(id: string, options?: Omit<RequestOptions, 'method' | 'body'>): Promise<void> {
+    return requestJson<void>(`/history/${encodeURIComponent(id)}`, { ...options, method: 'DELETE' });
+  },
+
+  /**
+   * P4-03：DELETE /history
+   * 清空当前用户的所有历史。返回删除条数。
+   */
+  historyDeleteAll(options?: Omit<RequestOptions, 'method' | 'body'>): Promise<HistoryDeleteAllResponse> {
+    return requestJson<HistoryDeleteAllResponse>('/history', { ...options, method: 'DELETE' });
+  },
+
+  // -------- 账号（P4-04） --------
+  /**
+   * P4-04：DELETE /auth/me
+   * 删除当前账号（GDPR 级联删除 auth.user + 历史记录）。
+   * 后端会 revoke 所有 refresh_token；前端拿到 204 后直接清 session 跳首页。
+   */
+  accountDelete(options?: Omit<RequestOptions, 'method' | 'body'>): Promise<void> {
+    return requestJson<void>('/auth/me', { ...options, method: 'DELETE' });
   },
 };

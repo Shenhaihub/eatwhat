@@ -51,3 +51,8 @@ desktop.ini
 *.log
 tmp/
 temp/
+
+# --- E2E / debug artifacts (may contain session tokens) ---
+_e2e_*.json
+backend/_e2e_*.json
+

@@ -25,7 +25,10 @@ SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
 
 _HTTP_TO_CODE = {
     400: BAD_REQUEST,
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
     404: NOT_FOUND,
+    422: VALIDATION_ERROR,
     429: RATE_LIMITED,
     500: INTERNAL_ERROR,
     503: SERVICE_UNAVAILABLE,
@@ -33,7 +36,10 @@ _HTTP_TO_CODE = {
 
 _HTTP_MESSAGES = {
     400: "请求无效",
+    401: "未登录或登录态无效",
+    403: "无权限执行该操作",
     404: "资源不存在",
+    422: "请求参数校验失败",
     429: "请求过于频繁，请稍后再试",
     500: "服务器内部错误，请稍后再试",
     503: "服务暂时不可用",
@@ -115,10 +121,14 @@ async def http_exception_handler(request: Request, exc: Exception) -> JSONRespon
     error = cast(StarletteHTTPException, exc)
     code = _HTTP_TO_CODE.get(error.status_code, INTERNAL_ERROR)
     message = _HTTP_MESSAGES.get(error.status_code, "请求失败")
-    # 允许业务代码抛 HTTPException(detail={"code":..., "message":...}) 透传
+    # 透传业务自定义 detail：
+    #  - dict：优先透传 code/message
+    #  - str：业务明确写了 detail，用它覆盖默认 message（不覆盖的话 Auth 里写的中文 detail 会被吞掉）
     if isinstance(error.detail, dict):
         code = str(error.detail.get("code", code))
         message = str(error.detail.get("message", message))
+    elif isinstance(error.detail, str) and error.detail:
+        message = error.detail
     _record_error(request, code)
     return JSONResponse(
         status_code=error.status_code,
