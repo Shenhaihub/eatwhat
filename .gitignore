@@ -47,6 +47,21 @@ dist/
 Thumbs.db
 desktop.ini
 
+# --- Windows 新建文件家族（中文/英文系统"右键新建"的默认命名冲突格式）---
+# 防范：工作区出现"?? 新建 文本文档 (2).txt"这类噪音 → 误 commit → Linux runner 编码/括号解析失败
+新建 文本文档*.txt
+新建 位图图片*.bmp
+新建 Microsoft Excel 工作表*.xlsx
+新建 Microsoft PowerPoint 演示文稿*.pptx
+新建 Microsoft Word 文档*.docx
+新建 压缩(zipped)文件夹*.zip
+New Text Document*.txt
+New Bitmap Image*.bmp
+New Microsoft Excel Worksheet*.xlsx
+New Microsoft PowerPoint Presentation*.pptx
+New Microsoft Word Document*.docx
+Compressed (zipped) Folder*.zip
+
 # --- Logs / temp ---
 *.log
 tmp/
