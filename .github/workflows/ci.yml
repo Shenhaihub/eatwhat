@@ -107,7 +107,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-          cache-dependency-path: backend/uv.lock
+          cache-dependency-glob: backend/uv.lock
 
       - name: "Diagnose: python/uv 版本 + 目标 py 文件清单"
         shell: bash
@@ -128,4 +128,5 @@ jobs:
 
       - run: uv run mypy app
 
-      - run: uv run pytest -q
+      # 遇到第一个失败立即停下并打印短 traceback（exit code 1 之外，要知道是哪条用例失败）
+      - run: uv run pytest --tb=short -x -q
