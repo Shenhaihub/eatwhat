@@ -15,7 +15,7 @@ AI API Key 安全原则（P5-03B）：
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 AppEnv = Literal["development", "test", "production"]
@@ -61,6 +61,16 @@ class Settings(BaseSettings):
 
     # 模型名（OpenAI 兼容格式）：deepseek 官方最便宜 V4 Flash
     ai_model: str = "deepseek-v4-flash"
+
+    # MockAIProvider 调试参数（只在 ai_provider=mock/auto 无密文时生效）
+    # 模式：normal（默认正常 JSON）/ slow（9s 延迟，模拟超时）
+    #       / invalid_json（损坏 JSON）/ out_of_bounds_food_code（越界 food_code）
+    mock_ai_mode: Literal[
+        "normal", "slow", "invalid_json", "out_of_bounds_food_code"
+    ] = "normal"
+
+    # seed：用于 normal 模式下扰动 5 候选排序（MEM-024：不同 seed → 不同首候选）
+    mock_ai_seed: int = Field(default=0, ge=0, le=10_000)
 
     # 额度/限流（先记录配置，P5-05 账本实现再实际启用）
     ai_daily_user_limit: int = 3
