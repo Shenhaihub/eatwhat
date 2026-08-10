@@ -1,7 +1,7 @@
 name: CI
 
 # P1-04 CI 最小门禁：前端 lint/typecheck/test/build + 后端 lint(ruff)/typecheck(mypy)/test(pytest)
-# 命令与本地完全一致；触发需 GitHub 远端（当前无远端，见 EatWhat_实施计划与状态.md P1-04）。
+# 命令与本地完全一致；触发需 GitHub 远端（见 EatWhat_实施计划与状态.md P1-04）。
 on:
   push:
     branches: [main]
@@ -26,13 +26,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # === 诊断：列工作目录全量文件 + 环境信息（定位 Linux runner 与 Windows 本地差异）===
+      - name: "Diagnose: 工作目录文件清单 + 环境"
+        shell: bash
+        run: |
+          set -e
+          echo "--- PWD ---"
+          pwd
+          echo "--- ls -la frontend/ ---"
+          ls -la .
+          echo "--- find (前100行) ---"
+          find . -maxdepth 5 -not -path './node_modules/*' -not -path './.git/*' | head -100
+          echo "--- 含中文/空格/括号的异常文件 ---"
+          find . -maxdepth 5 -not -path './node_modules/*' -not -path './.git/*' \
+            -name '*中文*' -o -name '*新建*' -o -name '*文本文档*' -o -name '* (*' -o -name '* *' \
+            | head -50 || true
+          echo "--- node/npm 版本 ---"
+          node --version
+          npm --version
+          echo "--- locale ---"
+          locale || true
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - run: npm ci
+      - name: "npm ci (严格按 lockfile 安装)"
+        run: npm ci
+
+      - name: "Diagnose: oxlint 版本 + 扫描范围"
+        shell: bash
+        run: |
+          set -e
+          npx oxlint --version || true
+          echo "--- oxlint 目标文件 (ts/tsx/js/jsx, 前80) ---"
+          find src -type f \( -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.jsx' \) \
+            | head -80 || true
 
       - run: npm run lint
 
@@ -51,6 +82,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # === 诊断：列工作目录全量文件 + 环境信息 ===
+      - name: "Diagnose: 工作目录文件清单 + 环境"
+        shell: bash
+        run: |
+          set -e
+          echo "--- PWD ---"
+          pwd
+          echo "--- ls -la backend/ ---"
+          ls -la .
+          echo "--- find (前100行) ---"
+          find . -maxdepth 5 -not -path './.venv/*' -not -path './.git/*' -not -path './.pytest_cache/*' -not -path './.ruff_cache/*' -not -path './.mypy_cache/*' | head -100
+          echo "--- 含中文/空格/括号/新建 文本文档 的异常文件 ---"
+          find . -maxdepth 5 -not -path './.venv/*' -not -path './.git/*' \
+            -name '*新建*' -o -name '*文本文档*' -o -name '* (*' -o -name '* *' \
+            | head -50 || true
+          echo "--- locale ---"
+          locale || true
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -60,10 +109,22 @@ jobs:
           enable-cache: true
           cache-dependency-path: backend/uv.lock
 
+      - name: "Diagnose: python/uv 版本 + 目标 py 文件清单"
+        shell: bash
+        run: |
+          set -e
+          python3 --version
+          uv --version
+          uv run ruff --version || true
+          echo "--- ruff 目标文件 (py, 前100) ---"
+          find app tests -name '*.py' -type f | head -100 || true
+          echo "--- backend 根目录所有 *.py ---"
+          find . -maxdepth 1 -name '*.py' -type f || true
+
       # --frozen：CI 必须使用已提交的 uv.lock，不自动更新锁文件。
       - run: uv sync --frozen
 
-      - run: uv run ruff check .
+      - run: uv run ruff check . --verbose
 
       - run: uv run mypy app
 

@@ -180,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           // 非 JSON 响应时按原样忽略（兼容旧实现）
         }
-      } catch (err) {
+      } catch {
         // 前端 SDK 兜底：直接调 Supabase signInWithOtp
         await sb.auth.signInWithOtp({
           email,
