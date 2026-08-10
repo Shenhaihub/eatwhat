@@ -21,6 +21,7 @@ DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE"
 INTERNAL_ERROR = "INTERNAL_ERROR"
 NOT_FOUND = "NOT_FOUND"
 BAD_REQUEST = "BAD_REQUEST"
+CONFLICT = "CONFLICT"
 SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
 
 _HTTP_TO_CODE = {
@@ -28,6 +29,7 @@ _HTTP_TO_CODE = {
     401: "UNAUTHORIZED",
     403: "FORBIDDEN",
     404: NOT_FOUND,
+    409: CONFLICT,
     422: VALIDATION_ERROR,
     429: RATE_LIMITED,
     500: INTERNAL_ERROR,
@@ -39,6 +41,7 @@ _HTTP_MESSAGES = {
     401: "未登录或登录态无效",
     403: "无权限执行该操作",
     404: "资源不存在",
+    409: "资源状态冲突（请刷新后重试）",
     422: "请求参数校验失败",
     429: "请求过于频繁，请稍后再试",
     500: "服务器内部错误，请稍后再试",
