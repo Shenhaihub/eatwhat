@@ -5,8 +5,9 @@ import json
 import os
 
 os.environ.pop("APP_ENV", None)
-from app.core.config import Settings  # noqa: E402
-from supabase import create_client  # noqa: E402
+from supabase import create_client
+
+from app.core.config import Settings
 
 s = Settings(_env_file=".env")
 service_role = (
@@ -53,7 +54,7 @@ obj = {
         ),
         "phone": getattr(user, "phone", None),
         "confirmed_at": (
-            getattr(user, "confirmed_at").isoformat()
+            user.confirmed_at.isoformat()
             if getattr(user, "confirmed_at", None)
             else None
         ),
