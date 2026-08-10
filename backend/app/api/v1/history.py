@@ -25,7 +25,19 @@ from pydantic import BaseModel, Field
 
 from app.api.v1.auth import CurrentUser, get_current_user
 from app.core.config import Settings, get_settings
+from app.core.exceptions import INTERNAL_ERROR, AppError
 from app.core.supabase_client import SupabaseAdminClient, get_supabase_admin
+
+
+def _require_sb(sb: SupabaseAdminClient | None) -> SupabaseAdminClient:
+    """History 路由强依赖 Supabase：缺失直接返回 500 级错误。"""
+    if sb is None:
+        raise AppError(
+            INTERNAL_ERROR,
+            message="历史记录服务暂不可用（Supabase 未配置）",
+            details={"reason": "supabase_not_configured"},
+        )
+    return sb
 
 log = logging.getLogger("app.api.v1.history")
 
@@ -151,23 +163,25 @@ def _parse_ts(value: Any) -> datetime:
 async def create_history(
     payload: HistoryWriteRequest,
     current: Annotated[CurrentUser, Depends(get_current_user)],
-    sb: Annotated[SupabaseAdminClient, Depends(get_supabase_admin)],
     settings: Annotated[Settings, Depends(get_settings)],
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
 ) -> HistoryRecordResponse:
+    sb_ok = _require_sb(sb)
     log.info("history_write user=%s result_count=%s food_code=%s", current.user_id, payload.result_count, payload.food_code)
-    return write_user_recommendation(sb=sb, user=current, payload=payload)
+    return write_user_recommendation(sb=sb_ok, user=current, payload=payload)
 
 
 @router.get("", response_model=HistoryListResponse)
 async def list_history(
     current: Annotated[CurrentUser, Depends(get_current_user)],
-    sb: Annotated[SupabaseAdminClient, Depends(get_supabase_admin)],
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> HistoryListResponse:
+    sb_ok = _require_sb(sb)
     # 1) 强制过滤 user_id + 排序
     query = (
-        sb.client.table("user_recommendations")
+        sb_ok.client.table("user_recommendations")
         .select("*")
         .eq("user_id", str(current.user_id))
         .order("created_at", desc=True)
@@ -175,7 +189,7 @@ async def list_history(
     # 2) 取总数（先不加 limit/offset 做 count）
     #    Supabase client 不能同时做 select * + count；分两次或用 header。
     #    MVP 用子查询 count（简便写法）：
-    count_res = sb.client.table("user_recommendations").select("id", count=CountMethod.exact).eq("user_id", str(current.user_id)).execute()
+    count_res = sb_ok.client.table("user_recommendations").select("id", count=CountMethod.exact).eq("user_id", str(current.user_id)).execute()
     total = int(count_res.count or 0)
 
     # 3) 取分页数据
@@ -190,11 +204,12 @@ async def list_history(
 async def delete_history_item(
     record_id: UUID,
     current: Annotated[CurrentUser, Depends(get_current_user)],
-    sb: Annotated[SupabaseAdminClient, Depends(get_supabase_admin)],
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
 ) -> None:
     """删除单条；若不归当前用户则抛 404（防越权枚举）。"""
+    sb_ok = _require_sb(sb)
     delete_res = (
-        sb.client.table("user_recommendations")
+        sb_ok.client.table("user_recommendations")
         .delete()
         .eq("id", str(record_id))
         .eq("user_id", str(current.user_id))
@@ -209,11 +224,12 @@ async def delete_history_item(
 @router.delete("", response_model=HistoryDeleteAllResponse)
 async def delete_all_history(
     current: Annotated[CurrentUser, Depends(get_current_user)],
-    sb: Annotated[SupabaseAdminClient, Depends(get_supabase_admin)],
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
 ) -> HistoryDeleteAllResponse:
     """清空当前用户的所有历史；返回删除条数。"""
+    sb_ok = _require_sb(sb)
     delete_res = (
-        sb.client.table("user_recommendations")
+        sb_ok.client.table("user_recommendations")
         .delete(count=CountMethod.exact)
         .eq("user_id", str(current.user_id))
         .execute()

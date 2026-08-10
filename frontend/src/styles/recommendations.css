@@ -1,5 +1,4 @@
-/*
- * P2-04 补充：推荐结果卡片样式
+/* P2-04 补充：推荐结果卡片样式
  * 与问卷页 questionnaire-page 壳子复用同一套 design tokens
  */
 
@@ -118,4 +117,259 @@
   background: color-mix(in oklab, var(--color-text-muted) 8%, var(--color-surface));
   color: var(--color-text-muted);
   font-size: 0.85rem;
+}
+
+/* ========== P5-02A：AI 四阶段 Stepper ========== */
+.ai-wait-shell {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.ai-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.ai-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  position: relative;
+}
+
+.ai-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: calc(50% + 18px);
+  right: calc(-50% + 18px);
+  height: 2px;
+  background: var(--color-border);
+}
+
+.ai-step.is-done::after {
+  background: var(--color-primary);
+}
+
+.ai-step-indicator {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  z-index: 1;
+  border: 2px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.ai-step.is-done .ai-step-indicator {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.ai-step.is-active .ai-step-indicator {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary) 18%, transparent);
+  animation: ai-step-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ai-step-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-primary) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in oklab, var(--color-primary) 8%, transparent);
+  }
+}
+
+.ai-step-label {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.ai-step.is-active .ai-step-label,
+.ai-step.is-done .ai-step-label {
+  color: var(--color-text);
+}
+
+.ai-step.is-active .ai-step-label {
+  font-weight: 600;
+}
+
+/* ========== P5-02A：Shimmer Skeleton Card ========== */
+.skeleton-card {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  display: grid;
+  gap: var(--space-3);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-card[data-priority='1'] {
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--color-primary) 35%, var(--color-border)),
+    0 10px 30px color-mix(in oklab, var(--color-primary) 12%, transparent);
+}
+
+.skeleton-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.skeleton-row {
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-row::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, #fff 55%, transparent) 50%,
+    transparent 100%
+  );
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-rank {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+}
+
+.skeleton-name {
+  flex: 1 1 auto;
+  height: 22px;
+  width: 50%;
+}
+
+.skeleton-tag {
+  width: 60px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.skeleton-summary-line-1 {
+  height: 16px;
+  width: 95%;
+}
+
+.skeleton-summary-line-2 {
+  height: 16px;
+  width: 70%;
+}
+
+.skeleton-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.skeleton-chip {
+  height: 22px;
+  border-radius: 999px;
+  width: 72px;
+}
+
+.skeleton-chip + .skeleton-chip {
+  width: 88px;
+}
+
+.skeleton-chip + .skeleton-chip + .skeleton-chip {
+  width: 64px;
+}
+
+.skeleton-note {
+  height: 36px;
+  width: 85%;
+  border-radius: var(--radius-sm);
+}
+
+/* 可访问性：aria-busy=true 时的骨架整体标记 */
+.ai-wait-shell[aria-busy='true'] {
+  cursor: progress;
+}
+
+/* ========== P5-02：动态追问 ========== */
+.follow-up-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-block: var(--space-5) var(--space-4);
+}
+.follow-up-header {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-primary) 5%, var(--color-surface));
+}
+.follow-up-rounds {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin: 0 0 var(--space-2);
+}
+.follow-up-purpose {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+.follow-up-question-card {
+  padding: var(--space-4);
+}
+.follow-up-q-badge {
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  margin-right: var(--space-2);
+  font-size: 0.78rem;
+}
+.follow-up-opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-2);
+}
+.follow-up-opt {
+  justify-content: center;
+  text-align: center;
+  min-height: 44px;
+}
+.follow-up-opt.is-disabled,
+.follow-up-opt:disabled {
+  opacity: 0.55;
+  cursor: progress;
+  pointer-events: none;
 }

@@ -20,10 +20,12 @@ import type { FormEvent } from 'react';
 import { api, ApiError } from '../services/api/client';
 import type {
   DimensionCoverage,
+  FollowUpQuestionV1,
   NextAction,
   QuestionBankItem,
   QuestionnaireRecomputeResult,
   RecommendationItem,
+  SessionStateResponseV1,
 } from '../services/api/types';
 import '../styles/recommendations.css';
 
@@ -33,6 +35,25 @@ const DRAFT_KEY = `eatwhat:questionnaire:draft:${QUESTIONNAIRE_VERSION}:${ENTRY_
 const DEBOUNCE_MS = 200;
 
 type Answers = Record<string, string[]>;
+
+// ========== P5-02A：AI 生成四阶段 Stepper ==========
+type AiStage = 1 | 2 | 3 | 4;
+
+const AI_STEP_META: ReadonlyArray<{ id: AiStage; label: string }> = [
+  { id: 1, label: '接收偏好' },
+  { id: 2, label: '生成候选' },
+  { id: 3, label: '匹配规则' },
+  { id: 4, label: '排序优化' },
+] as const;
+
+// Stepper 推进节奏（毫秒）：进入 loading 态后按时间推进 aiStage，并
+// 与 expandLevel（1→3→5）联动，给用户真实的"AI 一步步在做"感。
+const STEPPER_PHASES: ReadonlyArray<{ at: number; stage: AiStage; expand?: 1 | 3 | 5 }> = [
+  { at: 0, stage: 1 }, // 立即：阶段 1 标记已完成（偏好已传入），进入阶段 2
+  { at: 600, stage: 2, expand: 1 },
+  { at: 1400, stage: 3, expand: 3 }, // 进入阶段3时骨架从1张→3张
+  { at: 2400, stage: 4, expand: 5 }, // 进入阶段4时骨架3张→5张（若还在加载则给足预览感）
+] as const;
 
 interface LoadState {
   loading: boolean;
@@ -98,11 +119,52 @@ export default function Recommend() {
     error: null,
     items: null,
   });
+  // P5-02：动态追问会话。非空 = 进入 follow_up 态；回答后若 final 则清空并出 5 卡。
+  const [followUpSession, setFollowUpSession] = useState<SessionStateResponseV1 | null>(null);
+  // P5-02：正在回答 follow_up（answer HTTP 请求中）—— 禁用选项 UI。
+  const [answerLoading, setAnswerLoading] = useState(false);
   // D-008：1→3→5 渐进展示。初始只展示 priority=1，点击展开到 3，再点击到 5。
   const [expandLevel, setExpandLevel] = useState<1 | 3 | 5>(1);
+  // P5-02A：AI Stepper 当前 active 阶段（1..4）。loading=true 时由 useEffect 按节奏推进。
+  const [aiStage, setAiStage] = useState<AiStage>(4);
   const debounceTimer = useRef<number | null>(null);
   const fetchSeq = useRef(0);
   const recAbort = useRef<AbortController | null>(null);
+  const stepperTimers = useRef<number[]>([]);
+
+  // ---- P5-02A：Stepper 推进器。recState.loading=true 时启动；结束/卸载时清理。----
+  useEffect(() => {
+    if (!recState.loading) return;
+    // 清理上一轮残留 timers（理论不会有，保险）
+    stepperTimers.current.forEach((t) => window.clearTimeout(t));
+    stepperTimers.current = [];
+
+    const pushTimer = (t: number) => {
+      stepperTimers.current.push(t);
+    };
+
+    // 进入 loading：立即 reset aiStage=1，expandLevel=1（和真实结果返回时保持一致）
+    setAiStage(1);
+    setExpandLevel(1);
+
+    for (const phase of STEPPER_PHASES) {
+      if (phase.at === 0) {
+        // t=0 的 phase 直接走（阶段 1 立即标完成，active 立刻切到 2 开始 pulse）
+        if (phase.expand) setExpandLevel(phase.expand);
+        continue;
+      }
+      const t = window.setTimeout(() => {
+        setAiStage(phase.stage);
+        if (phase.expand) setExpandLevel(phase.expand);
+      }, phase.at);
+      pushTimer(t);
+    }
+
+    return () => {
+      stepperTimers.current.forEach((t) => window.clearTimeout(t));
+      stepperTimers.current = [];
+    };
+  }, [recState.loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- 本地草稿持久化：answers 变化即写 localStorage ----
   useEffect(() => {
@@ -191,23 +253,53 @@ export default function Recommend() {
     [],
   );
 
-  // ---- 进入结果态：POST /recommendations ----
+  // ---- 进入结果态：P5-02 动态会话（start → 最多 3 轮 follow_up → final），失败回退 P2 一次性生成 ----
   const generateRecommendations = useCallback(async () => {
     if (recAbort.current) recAbort.current.abort();
     const controller = new AbortController();
     recAbort.current = controller;
+    setFollowUpSession(null);
+    setAnswerLoading(false);
     setRecState({ loading: true, error: null, items: null });
     try {
-      const items = await api.recommendationsGenerate(
-        {
-          entry_intent: ENTRY_INTENT,
-          questionnaire_version: QUESTIONNAIRE_VERSION,
-          answers_by_question_id: answers,
-        },
-        { signal: controller.signal },
-      );
+      // 先尝试 P5：动态会话（新流程）
+      let finalItems: readonly RecommendationItem[] | null = null;
+      try {
+        const startResp = await api.recommendationsSessionStart(
+          {
+            entry_intent: ENTRY_INTENT,
+            questionnaire_version: QUESTIONNAIRE_VERSION,
+            answers_by_question_id: answers,
+          },
+          { signal: controller.signal },
+        );
+        if (startResp.stage === 'final') {
+          finalItems = startResp.candidates ?? null;
+        } else {
+          // follow_up：保存会话，交给 follow_up UI 分支
+          setRecState({ loading: false, error: null, items: null });
+          setFollowUpSession(startResp);
+          return;
+        }
+      } catch (sessionErr) {
+        // fallback：旧版 POST /recommendations（P2 兼容兜底）
+        if (controller.signal.aborted) throw sessionErr;
+        const legacy = await api.recommendationsGenerate(
+          {
+            entry_intent: ENTRY_INTENT,
+            questionnaire_version: QUESTIONNAIRE_VERSION,
+            answers_by_question_id: answers,
+          },
+          { signal: controller.signal },
+        );
+        finalItems = legacy;
+      }
+      if (finalItems == null) {
+        throw new Error('G-08 违规：服务端未返回候选');
+      }
       // 按 priority 升序兜底（后端已保证严格递增，但前端 sort 不影响稳定性）
-      const sorted = [...items].sort((a, b) => a.priority - b.priority);
+      const sorted = [...finalItems].sort((a, b) => a.priority - b.priority);
+      setFollowUpSession(null);
       setRecState({ loading: false, error: null, items: sorted });
       setExpandLevel(1); // D-008：进入结果态时重置为只展示 1 张
     } catch (err) {
@@ -218,9 +310,52 @@ export default function Recommend() {
           : err instanceof Error
             ? err.message
             : '推荐失败，请稍后重试';
+      setFollowUpSession(null);
       setRecState({ loading: false, error: message, items: null });
     }
   }, [answers]);
+
+  // ---- P5-02：回答一道 follow_up ----
+  const answerFollowUp = useCallback(
+    async (optionValue: string) => {
+      const sess = followUpSession;
+      if (!sess || !sess.question || answerLoading) return;
+      const controller = new AbortController();
+      setAnswerLoading(true);
+      try {
+        const resp = await api.recommendationsSessionAnswer(
+          sess.session_id,
+          {
+            question_id: sess.question.question_id,
+            selected_option_value: optionValue,
+          },
+          { signal: controller.signal },
+        );
+        if (resp.stage === 'final') {
+          const items = resp.candidates;
+          if (!items) throw new Error('G-08 违规：final 阶段未返回 candidates');
+          const sorted = [...items].sort((a, b) => a.priority - b.priority);
+          setFollowUpSession(null);
+          setRecState({ loading: false, error: null, items: sorted });
+          setExpandLevel(1);
+        } else {
+          // 下一轮 follow_up
+          setFollowUpSession(resp);
+        }
+      } catch (err) {
+        const message =
+          err instanceof ApiError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : '回答提交失败，请稍后重试';
+        setRecState((s) => ({ ...s, error: message }));
+      } finally {
+        setAnswerLoading(false);
+      }
+    },
+    [answerLoading, followUpSession],
+  );
 
   const nextAction: NextAction = result?.next_action ?? 'proceed_questionnaire';
   const progress = result?.progress ?? 0;
@@ -238,6 +373,8 @@ export default function Recommend() {
       e?.preventDefault?.();
       setAnswers({});
       setRecState({ loading: false, error: null, items: null });
+      setFollowUpSession(null);
+      setAnswerLoading(false);
       if (typeof window !== 'undefined') window.localStorage.removeItem(DRAFT_KEY);
     },
     [],
@@ -245,26 +382,39 @@ export default function Recommend() {
 
   const handleBackToQuestionnaire = useCallback(() => {
     setRecState({ loading: false, error: null, items: null });
+    setFollowUpSession(null);
+    setAnswerLoading(false);
   }, []);
 
   return (
     <div className="page-shell questionnaire-page">
       <p className="eyebrow">推荐流程 · 自适应问卷</p>
-      <h1>{isResultView ? '为你准备了 5 个候选' : '决定一下，大概想吃什么'}</h1>
+      <h1>
+        {isResultView
+          ? '为你准备了 5 个候选'
+          : followUpSession
+            ? '再回答 1–2 个小问题，就能出推荐了'
+            : '决定一下，大概想吃什么'}
+      </h1>
 
-      {!isResultView ? (
+      {isResultView ? (
+        <p className="microcopy" style={{ marginBottom: 'var(--space-4)' }}>
+          以下推荐来源于确定性规则引擎（P2-02）；越靠前的越匹配你刚刚回答的偏好。
+          {followUpSession?.final_reason ? `（生成来源：${followUpSession.final_reason}）` : ''}
+        </p>
+      ) : followUpSession ? (
+        <p className="microcopy" style={{ marginBottom: 'var(--space-4)' }}>
+          为了让推荐更贴近你当下的口味，我们会补充问几个维度。最多 3 轮，随时可提前得出结果。
+        </p>
+      ) : (
         <p className="microcopy" style={{ marginBottom: 'var(--space-4)' }}>
           只需回答当前显示的 1–2 题；我们会根据你的选择决定"要不要继续追问"。
           所有回答只用来生成食物推荐，不做账号追踪。
         </p>
-      ) : (
-        <p className="microcopy" style={{ marginBottom: 'var(--space-4)' }}>
-          以下推荐来源于确定性规则引擎（P2-02）；越靠前的越匹配你刚刚回答的偏好。
-        </p>
       )}
 
       {/* 只有问卷态才显示进度条 */}
-      {!isResultView ? (
+      {!isResultView && !followUpSession ? (
         <div className="progress-shell" aria-hidden={false}>
           <div className="progress-header">
             <span>问卷进度</span>
@@ -336,7 +486,82 @@ export default function Recommend() {
         </div>
       ) : null}
 
-      {!isResultView ? (
+      {recState.loading ? (
+        // ============ P5-02A：AI 等待骨架 UI ============
+        <div className="ai-wait-shell" aria-busy="true" aria-label="正在生成推荐，请稍候">
+          {/* 四阶段 Stepper */}
+          <ol className="ai-stepper" role="list" aria-label="推荐生成进度">
+            {AI_STEP_META.map((step) => {
+              // aiStage=N 表示：已完成到第 N 步（step.id <= N → is-done，打勾）
+              // 若 N < 4 → active = N+1（下一个正在进行）
+              // 若 N = 4 → active = 4（全部都 done 但仍在等最终 HTTP 返回，4 显示 active pulse）
+              const done = step.id <= aiStage;
+              const active = aiStage < 4 ? step.id === aiStage + 1 : step.id === 4;
+              const classNames = ['ai-step'];
+              if (done) classNames.push('is-done');
+              if (active) classNames.push('is-active');
+              return (
+                <li key={step.id} className={classNames.join(' ')} aria-current={active ? 'step' : undefined}>
+                  <div className="ai-step-indicator">
+                    {done ? '✓' : step.id}
+                  </div>
+                  <div className="ai-step-label">{step.label}</div>
+                </li>
+              );
+            })}
+          </ol>
+
+          {/* 5 张骨架卡，1→3→5 节奏与 expandLevel 同步（真实结果出卡节奏一致） */}
+          {[1, 2, 3, 4, 5].map((priority) => (
+            <div
+              key={priority}
+              className="skeleton-card"
+              data-priority={priority}
+              hidden={priority > expandLevel}
+              aria-hidden={priority > expandLevel}
+            >
+              <div className="skeleton-header">
+                <div className="skeleton-row skeleton-rank" />
+                <div className="skeleton-row skeleton-name" />
+                <div className="skeleton-row skeleton-tag" />
+              </div>
+              <div className="skeleton-row skeleton-summary-line-1" />
+              <div className="skeleton-row skeleton-summary-line-2" />
+              <div className="skeleton-signals">
+                <div className="skeleton-row skeleton-chip" />
+                <div className="skeleton-row skeleton-chip" />
+                <div className="skeleton-row skeleton-chip" />
+              </div>
+              <div className="skeleton-row skeleton-note" />
+            </div>
+          ))}
+        </div>
+      ) : followUpSession && followUpSession.stage === 'follow_up' && followUpSession.question ? (
+        // ============ P5-02：AI 动态追问态 ============
+        <section className="follow-up-shell" aria-label="动态追问">
+          <header className="follow-up-header">
+            <p className="follow-up-rounds">
+              AI 追问 · 第 {Math.min(followUpSession.rounds_completed + 1, followUpSession.max_rounds)} / {followUpSession.max_rounds} 轮
+            </p>
+            <p className="follow-up-purpose">{followUpSession.question.purpose_zh}</p>
+          </header>
+          <FollowUpQuestionCard
+            question={followUpSession.question}
+            answering={answerLoading}
+            onPick={answerFollowUp}
+          />
+          <div className="q-footer">
+            <button
+              type="button"
+              className="button button-secondary"
+              data-testid="follow-up-back"
+              onClick={handleBackToQuestionnaire}
+            >
+              返回修改问卷答案
+            </button>
+          </div>
+        </section>
+      ) : !isResultView ? (
         // ============ 问卷态 ============
         <form onSubmit={handleResetDraft} className="questionnaire-form" noValidate>
           {nextQuestions.length === 0 ? (
@@ -501,6 +726,57 @@ export default function Recommend() {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+// ============ P5-02：FollowUpQuestionCard ============
+
+interface FollowUpQuestionCardProps {
+  readonly question: FollowUpQuestionV1;
+  readonly answering: boolean;
+  readonly onPick: (value: string) => void | Promise<void>;
+}
+
+/**
+ * 纯展示组件：把一道 follow_up 题渲染为 pill 单选按钮组。
+ * - 复用 q-card / q-opt 的视觉体系，减少新增 CSS 表面积；
+ * - 回答中 disabled + opacity，避免双提交；
+ * - onClick 直接调 onPick(value)，外层统一转 async。
+ */
+function FollowUpQuestionCard({ question, answering, onPick }: FollowUpQuestionCardProps) {
+  return (
+    <div
+      className="q-card follow-up-question-card"
+      role="radiogroup"
+      aria-label={question.title_zh}
+      aria-disabled={answering}
+    >
+      <legend className="q-title follow-up-q-title">
+        <span className="q-required follow-up-q-badge">追问</span>
+        {question.title_zh}
+      </legend>
+      <div className="q-opts follow-up-opts">
+        {question.options.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={false}
+            aria-disabled={answering}
+            disabled={answering}
+            className={`q-opt opt-pill follow-up-opt ${answering ? 'is-disabled' : ''}`}
+            data-testid={`follow-up-option-${opt.value}`}
+            onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+              e.preventDefault();
+              if (answering) return;
+              void onPick(opt.value);
+            }}
+          >
+            <span className="q-opt-val">{opt.label_zh}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

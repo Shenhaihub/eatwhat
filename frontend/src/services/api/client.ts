@@ -23,6 +23,8 @@ import type {
   RecommendationsGenerateResponseV1,
   RestaurantSearchRequestV1,
   RestaurantSearchResponseV1,
+  SessionAnswerRequestV1,
+  SessionStateResponseV1,
 } from './types';
 import { createAccessTokenGetter } from '../../context/AuthContext';
 
@@ -147,6 +149,57 @@ export const api = {
     options?: Omit<RequestOptions, 'method' | 'body'>,
   ): Promise<RecommendationsGenerateResponseV1> {
     return api.post<RecommendationsGenerateResponseV1>('/recommendations', request, options);
+  },
+
+  // -------- P5-02：动态追问会话 --------
+  /**
+   * P5-02：POST /recommendations/session/start
+   * 开始一个动态会话（最多 3 轮 AI 追问 + 最终 Top5）。
+   *
+   * 入参与 POST /recommendations 完全相同（answers_by_question_id + questionnaire_version）。
+   * 返回统一 SessionState：
+   *   - stage=follow_up + question：下一步显示追问 UI
+   *   - stage=final + candidates：直接出最终 5 条
+   *   - rounds_completed/max_rounds：前端显示"第 n/3 轮"
+   */
+  recommendationsSessionStart(
+    request: RecommendationsGenerateRequestV1,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<SessionStateResponseV1> {
+    return api.post<SessionStateResponseV1>('/recommendations/session/start', request, options);
+  },
+
+  /**
+   * P5-02：GET /recommendations/session/{session_id}
+   * 幂等获取当前会话状态（刷新页面 / 断线重连用）。
+   * 会话 TTL 15 分钟；过期返回 404。
+   */
+  recommendationsSessionGet(
+    sessionId: string,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<SessionStateResponseV1> {
+    return api.get<SessionStateResponseV1>(`/recommendations/session/${encodeURIComponent(sessionId)}`, options);
+  },
+
+  /**
+   * P5-02：POST /recommendations/session/{session_id}/answer
+   * 回答一道 follow_up 题。
+   *
+   * - 幂等：同 question_id + option_value 多次提交返回同一次状态（HTTP 409 当重复非同一 value 时）。
+   * - 返回统一 SessionState：
+   *     stage=follow_up → 下一题 or 继续
+   *     stage=final → 最终 Top5 候选
+   */
+  recommendationsSessionAnswer(
+    sessionId: string,
+    answer: SessionAnswerRequestV1,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<SessionStateResponseV1> {
+    return api.post<SessionStateResponseV1>(
+      `/recommendations/session/${encodeURIComponent(sessionId)}/answer`,
+      answer,
+      options,
+    );
   },
 
   // -------- 地点上下文（P3-01） --------

@@ -25,7 +25,19 @@ from postgrest.types import CountMethod
 from pydantic import BaseModel, EmailStr, Field
 
 from app.core.config import Settings, get_settings
+from app.core.exceptions import INTERNAL_ERROR, AppError
 from app.core.supabase_client import SupabaseAdminClient, get_supabase_admin
+
+
+def _require_sb(sb: SupabaseAdminClient | None) -> SupabaseAdminClient:
+    """Auth 路由强依赖 Supabase：缺失直接返回 500 级错误。"""
+    if sb is None:
+        raise AppError(
+            INTERNAL_ERROR,
+            message="登录服务暂不可用（Supabase 未配置）",
+            details={"reason": "supabase_not_configured"},
+        )
+    return sb
 
 log = logging.getLogger(__name__)
 
@@ -241,21 +253,22 @@ async def get_current_user_optional(
 @router.post("/magic-link", response_model=MagicLinkResponse, status_code=status.HTTP_200_OK)
 async def send_magic_link(
     req: MagicLinkRequest,
-    sb: Annotated[SupabaseAdminClient, Depends(get_supabase_admin)],
     settings: Annotated[Settings, Depends(get_settings)],
     request: Request,
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
 ) -> MagicLinkResponse:
     """向邮箱发送 Magic Link（若用户不存在会自动创建）。
 
     无论用户是否已注册，成功都返回 200 sent=true（防止邮箱枚举，安全最佳实践）。
     """
+    sb_ok = _require_sb(sb)
     # 默认回调地址：本地 http://127.0.0.1:5173/auth/callback；生产由 req.redirect_to 覆盖
     redirect_to = req.redirect_to or "http://127.0.0.1:5173/auth/callback"
     email = req.email
     log.info("auth_magic_link_request ip=%s email_len=%d redirect_to=%s", request.client.host if request.client else "?", len(email), redirect_to)
 
     try:
-        sb.client.auth.sign_in_with_otp(
+        sb_ok.client.auth.sign_in_with_otp(
             {"email": email, "options": {"email_redirect_to": redirect_to, "should_create_user": True}}
         )
         # sign_in_with_otp(magiclink) 返回的是 None data / 仅 success
@@ -282,12 +295,13 @@ async def send_magic_link(
 @router.post("/verify", response_model=SessionResponse, status_code=status.HTTP_200_OK)
 async def verify_magic_link(
     req: VerifyRequest,
-    sb: Annotated[SupabaseAdminClient, Depends(get_supabase_admin)],
     request: Request,
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
 ) -> SessionResponse:
     """用 email + token 校验 magic link 并兑换完整 Session（含 access_token）。"""
+    sb_ok = _require_sb(sb)
     try:
-        session_resp = sb.client.auth.verify_otp({"email": req.email, "token": req.token, "type": req.type})
+        session_resp = sb_ok.client.auth.verify_otp({"email": req.email, "token": req.token, "type": req.type})
     except Exception as exc:
         # Supabase SDK 内部的 AuthApiError 未做 stub；通过属性判别（有 code/message 视为已知错误）
         code = getattr(exc, "code", None)
@@ -328,15 +342,16 @@ async def get_me(current: Annotated[CurrentUser, Depends(get_current_user)]) -> 
 @router.post("/logout", response_model=LogoutResponse, status_code=status.HTTP_200_OK)
 async def logout(
     current: Annotated[CurrentUser, Depends(get_current_user)],
-    sb: Annotated[SupabaseAdminClient, Depends(get_supabase_admin)],
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
 ) -> LogoutResponse:
     """吊销当前 session（前端调用后自己清除本地 localStorage 里的 token）。"""
+    sb_ok = _require_sb(sb)
     revoked = False
     try:
         # service_role 的 admin 没有"当前会话"的概念，要真正吊销需要带 access token 调 auth.sign_out
         # 这里通过前端自己清除 + 服务端返回成功即可，MVP 足够
         # （真实吊销：sb.client.auth.admin.sign_out(current.user_id) 但会吊销该用户所有会话）
-        sb.client.auth.sign_out()
+        sb_ok.client.auth.sign_out()
         revoked = True
     except Exception as exc:  # noqa: BLE001
         log.warning("auth_sign_out_failed user_id=%s err=%r", current.user_id, exc)
@@ -346,7 +361,7 @@ async def logout(
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_account(
     current: Annotated[CurrentUser, Depends(get_current_user)],
-    sb: Annotated[SupabaseAdminClient, Depends(get_supabase_admin)],
+    sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
 ) -> None:
     """GDPR 删除当前账号（级联删除历史记录）。
 
@@ -357,10 +372,11 @@ async def delete_account(
          这样会同时：吊销该用户所有 refresh_token、清 auth 相关表、移除身份。
       3) 前端 204 后自己清本地 session + 跳首页。
     """
+    sb_ok = _require_sb(sb)
     # 1) 显式删历史（记录日志用）
     try:
         hist_res = (
-            sb.client.table("user_recommendations")
+            sb_ok.client.table("user_recommendations")
             .delete(count=CountMethod.exact)
             .eq("user_id", str(current.user_id))
             .execute()
@@ -372,7 +388,7 @@ async def delete_account(
 
     # 2) 删除 auth.users 本体（该 user 的 sessions/identities 也会被 Supabase 级联清理）
     try:
-        sb.client.auth.admin.delete_user(str(current.user_id))
+        sb_ok.client.auth.admin.delete_user(str(current.user_id))
     except Exception as exc:
         # AuthApiError 例如 user_not_found 也当成功（幂等）
         code = getattr(exc, "code", None)

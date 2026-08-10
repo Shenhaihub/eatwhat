@@ -48,8 +48,13 @@ export {
   DICTIONARY_VERSION_PATTERN,
   QUESTIONNAIRE_VERSION_PATTERN,
   RECOMMENDATIONS_SUPPORTED_ENTRY_INTENTS,
+  type FollowUpOptionV1,
+  type FollowUpQuestionV1,
   type RecommendationsGenerateRequestV1,
   type RecommendationsGenerateResponseV1,
+  type SessionAnswerRequestV1,
+  type SessionStageV1,
+  type SessionStateResponseV1,
 } from './recommendations';
 export {
   type DemoLocationItem,
