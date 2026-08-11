@@ -26,6 +26,10 @@ export interface HistoryRecord {
   recommendation_snapshot: HistoryItemSnapshot;
   result_count: number;
   poi_provider: string | null;
+  // P5-03：动态推荐会话 ID（最多 3 轮追问的 trace id），写在 snapshot._meta.session_id
+  session_id: string | null;
+  // P5-03：最终生成来源标记（ai_finalized / rule_engine_fallback_ai_fail / legacy_rule_engine）
+  final_reason: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +49,9 @@ export interface HistoryWriteRequest {
   recommendation_snapshot: HistoryItemSnapshot;
   result_count?: number;
   poi_provider?: string | null;
+  // P5-03：写请求传了 session_id/final_reason 会写进 snapshot._meta（兼容旧 schema）
+  session_id?: string | null;
+  final_reason?: string | null;
   created_at?: string;
 }
 

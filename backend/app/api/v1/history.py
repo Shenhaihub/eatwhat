@@ -54,6 +54,11 @@ class HistoryRecordBase(BaseModel):
     recommendation_snapshot: dict[str, Any]
     result_count: int = 0
     poi_provider: str | None = None
+    # P5-03：动态推荐会话 ID（最多 3 轮追问的 session_id），用于回溯 trace
+    # 兼容策略：旧请求可缺省；数据库不新增列，而是包装进 recommendation_snapshot["_meta"]
+    session_id: str | None = Field(default=None, max_length=64)
+    # P5-03：最终生成来源标记（ai_finalized / rule_engine_fallback_ai_fail / legacy_rule_engine）
+    final_reason: str | None = Field(default=None, max_length=64)
 
 
 class HistoryWriteRequest(HistoryRecordBase):
@@ -112,7 +117,11 @@ def write_user_recommendation(
         "location_json": payload.location or {},
         "radius_meters": payload.radius_meters,
         "tags_json": payload.tags or [],
-        "recommendation_snapshot": payload.recommendation_snapshot,
+        "recommendation_snapshot": _attach_ai_meta(
+            snapshot=payload.recommendation_snapshot,
+            session_id=payload.session_id,
+            final_reason=payload.final_reason,
+        ),
         "result_count": payload.result_count,
         "poi_provider": payload.poi_provider,
     }
@@ -127,7 +136,60 @@ def write_user_recommendation(
     return _row_to_response(cast(dict[str, Any], rows[0]))
 
 
+_SNAPSHOT_META_KEY = "_meta"
+
+
+def _attach_ai_meta(
+    *,
+    snapshot: dict[str, Any],
+    session_id: str | None,
+    final_reason: str | None,
+) -> dict[str, Any]:
+    """把 session_id / final_reason 包进 snapshot._meta，兼容老数据库 schema。
+
+    原则：
+        - 不修改原 snapshot 上层其他字段（保持 G-07 完整性）；
+        - _meta 是个 dict，可扩展：session_id / final_reason / written_at；
+        - 老请求若都为 None，则不写 _meta，保持 snapshot 原样。
+    """
+    if not session_id and not final_reason:
+        return snapshot
+    meta: dict[str, Any] = {"written_at": datetime.now().astimezone().isoformat()}
+    if session_id:
+        meta["session_id"] = session_id
+    if final_reason:
+        meta["final_reason"] = final_reason
+    # 拷贝一份避免原地 mutate 调用方的 snapshot 对象
+    new_snapshot = dict(snapshot)
+    existing_meta = new_snapshot.get(_SNAPSHOT_META_KEY)
+    if isinstance(existing_meta, dict):
+        existing_meta.update(meta)
+    else:
+        new_snapshot[_SNAPSHOT_META_KEY] = meta
+    return new_snapshot
+
+
+def _extract_ai_meta(snapshot: dict[str, Any] | None) -> tuple[str | None, str | None]:
+    """从 recommendation_snapshot._meta 回读 session_id / final_reason。
+
+    返回：(session_id, final_reason) — 任一项缺失为 None。
+    """
+    if not isinstance(snapshot, dict):
+        return None, None
+    meta = snapshot.get(_SNAPSHOT_META_KEY)
+    if not isinstance(meta, dict):
+        return None, None
+    sid = meta.get("session_id")
+    reason = meta.get("final_reason")
+    return (
+        sid if isinstance(sid, str) else None,
+        reason if isinstance(reason, str) else None,
+    )
+
+
 def _row_to_response(row: dict[str, Any]) -> HistoryRecordResponse:
+    snapshot = row.get("recommendation_snapshot") or {}
+    session_id, final_reason = _extract_ai_meta(snapshot)
     return HistoryRecordResponse(
         id=UUID(str(row["id"])),
         user_id=UUID(str(row["user_id"])),
@@ -135,9 +197,11 @@ def _row_to_response(row: dict[str, Any]) -> HistoryRecordResponse:
         location=row.get("location_json") or {},
         radius_meters=row.get("radius_meters"),
         tags=row.get("tags_json") or [],
-        recommendation_snapshot=row.get("recommendation_snapshot") or {},
+        recommendation_snapshot=snapshot,
         result_count=int(row.get("result_count") or 0),
         poi_provider=row.get("poi_provider"),
+        session_id=session_id,
+        final_reason=final_reason,
         created_at=_parse_ts(row.get("created_at")),
         updated_at=_parse_ts(row.get("updated_at")),
     )
