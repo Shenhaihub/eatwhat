@@ -266,7 +266,8 @@ async def test_try_ai_finalize_fail_fallback_to_rule_engine() -> None:
     )
     items = await mgr.try_ai_finalize_recommendation(session=s, repo=repo)
     assert len(items) == 5
-    assert s.final_reason == "rule_engine_fallback_ai_fail"
+    # mock_ai_mode=invalid_json → schema 校验失败 → 细分码 schema
+    assert s.final_reason == "rule_engine_fallback_ai_schema"
     for it in items:
         assert it.generation_mode == GenerationMode.RULE
 
@@ -340,4 +341,5 @@ async def test_slow_ai_triggers_timeout_fallback_via_chat_service() -> None:
     )
     items = await mgr.try_ai_finalize_recommendation(session=s, repo=repo)
     assert len(items) == 5
-    assert s.final_reason == "rule_engine_fallback_ai_fail"
+    # mock_ai_mode=slow → timeout → 细分码 timeout
+    assert s.final_reason == "rule_engine_fallback_ai_timeout"

@@ -26,6 +26,7 @@ from app.schemas import RecommendationItem
 from app.schemas.ai import FinalRecommendationOutput, FollowUpQuestionOutput
 from app.schemas.enums import GenerationMode, SourceType
 from app.services.ai.mock_provider import FOLLOW_UP_TEMPLATES
+from app.services.ai.rate_limiter import AIRateLimiter, build_ai_rate_limiter
 from app.services.ai.service import ChatService
 from app.services.rule_engine import generate_rule_recommendations
 
@@ -56,6 +57,10 @@ class RecommendationSession:
 
     # 规则引擎的输入（已翻译过的七维），供最终生成回退 & system prompt 组装用
     rule_answers: Any  # QuestionnaireAnswers（不引循环 import，保持 duck-type）
+
+    # P5-07：绑定的登录用户 id。仅用于 AI 额度日限流（按 user 维度计数），不做 RLS。
+    # 未登录匿名用户走推荐（未来 P3 扩展）时此字段为 None，此时只走全局维度限流。
+    user_id: str | None = None
 
     # AI 增益侧
     round_index_1based_next: int = 1  # 下一问是第几轮（1..3）
@@ -100,6 +105,7 @@ class RecommendationSessionManager:
     def create_session(
         self,
         *,
+        user_id: str | None = None,
         questionnaire_answers_by_qid: dict[str, list[str]],
         questionnaire_version: str,
         dictionary_version: str,
@@ -111,6 +117,7 @@ class RecommendationSessionManager:
             session_id=sid,
             started_at=now,
             last_active_at=now,
+            user_id=user_id,
             questionnaire_answers_by_qid=dict(questionnaire_answers_by_qid),
             questionnaire_version=questionnaire_version,
             dictionary_version=dictionary_version,
@@ -147,6 +154,7 @@ class RecommendationSessionManager:
             system_prompt=prompt_sys,
             user_prompt=prompt_user,
             round_index_1based=1,
+            user_id=session.user_id,
         )
         # AI 失败/越界/超时 → 静默用默认第 1 题（fail-open）
         return ai_q or default
@@ -207,6 +215,7 @@ class RecommendationSessionManager:
             system_prompt=prompt_sys,
             user_prompt=prompt_user,
             round_index_1based=next_round,
+            user_id=session.user_id,
         )
         return ai_q or default_next
 
@@ -236,6 +245,9 @@ class RecommendationSessionManager:
     ) -> list[RecommendationItem]:
         """先尝试 AI 增益生成 5 候选（food_code 全部落在字典内 + 合法 schema）。
         任何一步失败 → 回退规则引擎。结果写进 session.final_items 后幂等返回。
+
+        P5-09：AI 失败时按细分 fail_code 写入 session.final_reason，便于前端
+        source badge 显示更具体的原因（Unauthorized / Quota / Timeout / ...）。
         """
         if session.final_items is not None:
             return list(session.final_items)
@@ -245,8 +257,12 @@ class RecommendationSessionManager:
             await self._chat_service.generate_final_recommendation(
                 system_prompt=prompt_sys,
                 user_prompt=prompt_user,
+                user_id=session.user_id,
             )
         )
+        # P5-09：AI 细分失败码（成功 = None，失败 = build/local_quota/remote_quota/
+        # unauthorized/timeout/schema/unknown）
+        fail_code = self._chat_service.take_last_fail_code()
 
         if ai_out is not None:
             try:
@@ -262,10 +278,10 @@ class RecommendationSessionManager:
                     type(exc).__name__,
                 )
 
-        # 兜底：规则引擎
+        # 兜底：规则引擎 + 按 fail_code 细分 final_reason
         items = generate_rule_recommendations(session.rule_answers, repo=repo)
         session.final_items = list(items)
-        session.final_reason = "rule_engine_fallback_ai_fail"
+        session.final_reason = _map_ai_fail_code_to_final_reason(fail_code)
         return list(items)
 
     # ============== 内部：Prompt 翻译（七维 + 已答追问题 → 自然语言摘要）==============
@@ -443,6 +459,31 @@ def _budget_note_for_dict_item(raw: Any) -> str | None:
     return None
 
 
+# ============== P5-09：AI 细分失败码 → session.final_reason 映射 ==============
+
+
+def _map_ai_fail_code_to_final_reason(fail_code: str | None) -> str:
+    """将 ChatService.take_last_fail_code() 细分值映射为 final_reason 落库值。
+
+    约定 key 前缀 rule_engine_fallback_* 保持历史日志/看板兼容；新增
+    local_quota/remote_quota/unauthorized/timeout/schema 五类细分级，
+    前端 sourceBadge.describeFinalReason 依此显示不同文案/颜色。
+    """
+    mapping: dict[str, str] = {
+        "build": "rule_engine_fallback_ai_build_fail",
+        "local_quota": "rule_engine_fallback_ai_local_quota",
+        "remote_quota": "rule_engine_fallback_ai_remote_quota",
+        "unauthorized": "rule_engine_fallback_ai_unauthorized",
+        "timeout": "rule_engine_fallback_ai_timeout",
+        "schema": "rule_engine_fallback_ai_schema",
+        "unknown": "rule_engine_fallback_ai_fail",  # 归类失败 → 旧默认值兼容
+    }
+    if fail_code is None:
+        # ai_out is None 但 fail_code 也为 None 的情形（极罕见，说明未走分类）
+        return "rule_engine_fallback_ai_fail"
+    return mapping.get(fail_code, "rule_engine_fallback_ai_fail")
+
+
 # ============== FastAPI 依赖（单例）==============
 
 _manager_singleton: RecommendationSessionManager | None = None
@@ -454,5 +495,10 @@ def get_recommendation_session_manager(settings: Settings) -> RecommendationSess
     global _manager_singleton
     with _manager_lock:
         if _manager_singleton is None:
-            _manager_singleton = RecommendationSessionManager(settings=settings)
+            rate_limiter: AIRateLimiter = build_ai_rate_limiter(settings)
+            chat_service = ChatService(settings=settings, rate_limiter=rate_limiter)
+            _manager_singleton = RecommendationSessionManager(
+                settings=settings,
+                chat_service=chat_service,
+            )
         return _manager_singleton

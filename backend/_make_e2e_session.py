@@ -15,11 +15,23 @@ FULL FLOW（路径 A + P5 动态会话，纯 HTTP TestClient，不启动浏览�
     6. 二次 POST /history  →  预期 401  (死 token 防御线验证)
     7. Supabase Admin: 最终确认 e2e 账号已被物理删除
 
+额外 CLI 参数（P5-10 DeepSeek 真调用冒烟 + 限流计数验证）：
+    --ai-provider {mock,deepseek,auto}
+          选 AI provider：默认 mock（原行为）；deepseek=强制用已加密的真实 API key；
+          auto=key 没配时自动回 mock。
+    --n-sessions N   连续跑 N 次完整 P5 循环（默认 1）。用于验证本地限流：如
+                     --n-sessions 6 --user-daily-limit 3 → 前 3 次真调用，第 4+ 次
+                     final_reason = rule_engine_fallback_ai_local_quota。
+    --user-daily-limit N   覆盖 settings.ai_daily_user_limit（0=不限制）
+    --global-daily-limit N 覆盖 settings.ai_global_daily_limit（0=不限制）
+    --skip-delete          调试模式：不 DELETE /auth/me，保留账号便于手动查历史记录。
+
 任何步骤失败：打印 ERROR + 非 0 退出；收尾阶段尝试重新 Supabase admin 删除该用户，
 避免留下污染账号，下次跑脚本也不会被"用户已存在"打断。
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -128,7 +140,12 @@ def _session_to_json(user, sess) -> dict[str, Any]:
     }
 
 
-def _run_full_p5_http_e2e(*, access_token: str, user_id: str) -> dict[str, Any]:
+def _run_full_p5_http_e2e(
+    *,
+    access_token: str,
+    user_id: str,
+    skip_delete: bool = False,
+) -> dict[str, Any]:
     """用 TestClient 跑完整 P5 链路。返回 debug info（session_id / final_reason / history_id）。"""
     debug: dict[str, Any] = {}
     with TestClient(app, raise_server_exceptions=True) as client:
@@ -240,33 +257,100 @@ def _run_full_p5_http_e2e(*, access_token: str, user_id: str) -> dict[str, Any]:
         assert list_total >= 1
         print(f"[E2E.P5] GET history OK total={list_total} written_record_match=True")
 
-        # ---- Step 5: DELETE /auth/me  GDPR 删账号 ----
-        r5 = client.delete("/api/v1/auth/me", headers=bearer)
-        assert r5.status_code == 204, f"DELETE /auth/me HTTP {r5.status_code}: {r5.text[:200]}"
-        print("[E2E.P5] DELETE /auth/me OK (204 No Content)")
+        if not skip_delete:
+            # ---- Step 5: DELETE /auth/me  GDPR 删账号 ----
+            r5 = client.delete("/api/v1/auth/me", headers=bearer)
+            assert r5.status_code == 204, f"DELETE /auth/me HTTP {r5.status_code}: {r5.text[:200]}"
+            print("[E2E.P5] DELETE /auth/me OK (204 No Content)")
 
-        # ---- Step 6: 死 token 防御——再写历史必须 401 ----
-        r6 = client.post(
-            "/api/v1/history",
-            json={
-                "recommendation_snapshot": {"zombie_attempt": True, "items": []},
-                "result_count": 0,
-            },
-            headers=bearer,
-        )
-        assert r6.status_code == 401, (
-            f"死 token 写历史预期 401，实际 HTTP {r6.status_code}。zombie token 安全防线失守！resp={r6.text[:200]}"
-        )
-        print("[E2E.P5] ZOMBIE-TOKEN CHECK OK (POST history -> 401 after DELETE /auth/me)")
+            # ---- Step 6: 死 token 防御——再写历史必须 401 ----
+            r6 = client.post(
+                "/api/v1/history",
+                json={
+                    "recommendation_snapshot": {"zombie_attempt": True, "items": []},
+                    "result_count": 0,
+                },
+                headers=bearer,
+            )
+            assert r6.status_code == 401, (
+                f"死 token 写历史预期 401，实际 HTTP {r6.status_code}。zombie token 安全防线失守！resp={r6.text[:200]}"
+            )
+            print("[E2E.P5] ZOMBIE-TOKEN CHECK OK (POST history -> 401 after DELETE /auth/me)")
+        else:
+            debug["skipped_delete"] = True
+            print("[E2E.P5] --skip-delete：跳过 DELETE /auth/me 与 zombie-token 检查")
 
     return debug
 
 
+def _reset_ai_service_singletons() -> None:
+    """每次 P5 循环前重置 RecommendationSessionManager / AIRateLimiter 进程内单例。
+
+    否则同一次 python 进程里跑多个 E2E 循环，manager（以及它内部 chat_service +
+    rate_limiter）会沿用旧的 settings 覆盖值；另外限流计数器无法从 0 开始，会
+    让 --n-sessions + --user-daily-limit 组合的验证变复杂。
+    """
+    from app.services import recommendation_session as mod
+
+    # 直接写模块级全局变量（都是 None 初始化 → 下次 Depends 会重建）
+    with mod._manager_lock:
+        mod._manager_singleton = None  # type: ignore[attr-defined]
+    mod._rate_limiter_singleton = None  # type: ignore[attr-defined]
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description="E2E 账号 + 完整 P5 HTTP 链路 + (可选)DeepSeek 真调用")
+    parser.add_argument(
+        "--ai-provider",
+        choices=["mock", "deepseek", "auto"],
+        default="mock",
+        help="选择 AI provider（默认 mock，不消耗真实额度）",
+    )
+    parser.add_argument(
+        "--n-sessions",
+        type=int,
+        default=1,
+        help="连续跑多少个完整 P5 循环（默认 1；≥2 用于验证本地 rate_limiter 计数）",
+    )
+    parser.add_argument(
+        "--user-daily-limit",
+        type=int,
+        default=None,
+        help="覆盖 settings.ai_daily_user_limit（不传则用 .env 里的值；0=不限制用户维度）",
+    )
+    parser.add_argument(
+        "--global-daily-limit",
+        type=int,
+        default=None,
+        help="覆盖 settings.ai_global_daily_limit（不传则用 .env 里的值；0=不限制全局维度）",
+    )
+    parser.add_argument(
+        "--skip-delete",
+        action="store_true",
+        help="调试模式：不 DELETE /auth/me，保留账号便于手动查 history 记录",
+    )
+    args = parser.parse_args()
+
     out_path = Path(__file__).resolve().parent / "_e2e_session.json"
     settings = _load_settings()
+
+    # ---- CLI 覆盖 settings（P5-10）----
+    settings.ai_provider = args.ai_provider  # type: ignore[assignment]
+    if args.user_daily_limit is not None:
+        settings.ai_daily_user_limit = int(args.user_daily_limit)
+    if args.global_daily_limit is not None:
+        settings.ai_global_daily_limit = int(args.global_daily_limit)
+    print(
+        f"[E2E.Params] ai_provider={settings.ai_provider} "
+        f"user_daily_limit={settings.ai_daily_user_limit} "
+        f"global_daily_limit={settings.ai_global_daily_limit} "
+        f"n_sessions={args.n_sessions} skip_delete={args.skip_delete}"
+    )
+
     sb_admin = _supabase_admin_client(settings)
     user_id_for_cleanup: str | None = None
+    # 多轮汇总：每条 P5 循环的 final_reason 聚合打印，方便验证限流命中模式
+    per_session: list[dict[str, Any]] = []
     try:
         _cleanup_user_if_exists(sb_admin, E2E_EMAIL)
 
@@ -278,35 +362,46 @@ def main() -> int:
         print(f"[E2E.Session] uid: {session_obj['user']['id']}")
         print(f"[E2E.Session] email: {session_obj['user']['email']}")
 
-        debug_info = _run_full_p5_http_e2e(
-            access_token=session.access_token,
-            user_id=str(user.id),
-        )
-        print(
-            "[E2E.ALL OK] debug:",
-            json.dumps(
-                {
-                    **debug_info,
-                    "uid": session_obj["user"]["id"],
-                    "email": session_obj["user"]["email"],
-                },
-                ensure_ascii=False,
-            ),
-        )
-        # 额外：验证 Supabase admin 层面用户已被 DELETE /auth/me 删除
-        try:
-            sb_admin.auth.admin.get_user_by_id(user_id_for_cleanup)
-            print("[E2E.Cleanup.WARN] Supabase admin 查询用户仍然存在（可能级联删除延迟或后端删除逻辑未物理删除，需人工核查）")
-        except Exception:  # noqa: BLE001
-            # get_user_by_id 找不到用户会抛错——这正是我们期望的物理删除结果
-            print("[E2E.Cleanup] VERIFIED：Supabase auth.users 中已不存在该 e2e 用户（GDPR OK）")
+        for idx in range(args.n_sessions):
+            print(f"\n=== [E2E.P5] LOOP {idx+1}/{args.n_sessions} ===")
+            _reset_ai_service_singletons()  # 每次循环重置单例 + 计数器
+            debug_info = _run_full_p5_http_e2e(
+                access_token=session.access_token,
+                user_id=str(user.id),
+                skip_delete=args.skip_delete,
+            )
+            debug_info["loop_index"] = idx + 1
+            per_session.append(debug_info)
+            print(
+                f"[E2E.P5] LOOP {idx+1} RESULT: session_id={debug_info.get('session_id')} "
+                f"final_reason={debug_info.get('final_reason')}"
+            )
+
+        # 汇总表（方便人眼核对限流命中）
+        print("\n=== [E2E.Summary] per_session final_reason ===")
+        for row in per_session:
+            print(
+                f"  loop={row['loop_index']:>2}  "
+                f"final_reason={row.get('final_reason')!r:<55}  "
+                f"session_id={row.get('session_id')}"
+            )
+
+        if not args.skip_delete:
+            # 额外：验证 Supabase admin 层面用户已被 DELETE /auth/me 删除
+            try:
+                sb_admin.auth.admin.get_user_by_id(user_id_for_cleanup)
+                print("[E2E.Cleanup.WARN] Supabase admin 查询用户仍然存在（可能级联删除延迟或后端删除逻辑未物理删除，需人工核查）")
+            except Exception:  # noqa: BLE001
+                # get_user_by_id 找不到用户会抛错——这正是我们期望的物理删除结果
+                print("[E2E.Cleanup] VERIFIED：Supabase auth.users 中已不存在该 e2e 用户（GDPR OK）")
+        print("[E2E.ALL OK]")
         return 0
     except Exception as exc:  # noqa: BLE001
         print(f"[E2E.FAILED] type={type(exc).__name__} msg={exc}", file=sys.stderr)
         return 1
     finally:
         # 收尾：不管成功失败，再次尝试物理删除 e2e 账号，避免留下测试账号
-        if user_id_for_cleanup:
+        if user_id_for_cleanup and not args.skip_delete:
             try:
                 UUID(user_id_for_cleanup)  # 合法性校验
                 sb_admin.auth.admin.delete_user(user_id_for_cleanup)
@@ -315,6 +410,8 @@ def main() -> int:
                 # delete_user 抛错有两种情况：①用户本来就被 DELETE /auth/me 删了；②网络/权限错。
                 # 这里只打一条 debug 信息，不影响 exit code
                 print(f"[E2E.Cleanup] finally 清理失败（可能用户已被 GDPR 删除，属预期）：type={type(exc).__name__}")
+        elif args.skip_delete:
+            print(f"[E2E.Cleanup] --skip-delete 跳过 finally 清理，账号仍保留：uid={user_id_for_cleanup}")
 
 
 if __name__ == "__main__":

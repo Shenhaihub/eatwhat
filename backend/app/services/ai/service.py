@@ -10,23 +10,29 @@
        "AI 输出不可信"→ 返回 None → 业务层回退规则引擎
     5. 异常统一：所有网络/超时/HTTP/模型限流/解密失败异常 → 捕获后写结构化日志
        → 返回 None。避免任何一条 AI 链路把整个推荐打挂。
+    6. P5-09：细分失败码——通过 ContextVar（协程隔离）记录最后一次失败类型，
+       业务层（如 recommendation_session）可在调用后 ``take_last_fail_code()``
+       读出，用来把 session.final_reason 写得更细，最终给前端 source badge 提示。
 
 用法示例（推荐路由 P5-04 接入）：
     service = ChatService(settings=settings)
     ai_result: FinalRecommendationOutput | None = (
         await service.generate_final_recommendation(profile=..., history=...)
     )
+    fail_code = service.take_last_fail_code()
     if ai_result is None:
-        # 回退规则引擎（真源）
+        # 回退规则引擎（真源），可按 fail_code 细分 final_reason
         candidates = rule_engine.generate(profile, history, k=5)
 """
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 from collections.abc import Mapping
 from typing import Any
 
+import httpx
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import Settings
@@ -36,6 +42,7 @@ from app.schemas.ai import FinalRecommendationOutput, FollowUpQuestionOutput
 from .base import AIProvider, ChatMessage
 from .deepseek_provider import DeepSeekProvider
 from .mock_provider import MockAIProvider
+from .rate_limiter import AIRateLimiter, AIRateLimitResult
 
 log = logging.getLogger("app.services.ai.service")
 
@@ -43,21 +50,73 @@ DEFAULT_CHAT_TIMEOUT_MS = 8_000
 DEFAULT_FINAL_TEMPERATURE = 0.3
 DEFAULT_FOLLOW_UP_TEMPERATURE = 0.5
 
+# P5-09：细分失败码集合（保持小写加下划线，便于落库后直接用在前端 key）
+FAIL_BUILD = "build"                # Provider 构建失败（密钥/配置）——未实际发出 HTTP 请求
+FAIL_LOCAL_QUOTA = "local_quota"    # 本机 rate_limiter 超限（用户/全局任意一维）
+FAIL_REMOTE_QUOTA = "remote_quota"  # 云端 DeepSeek 返回 429/限流
+FAIL_UNAUTHORIZED = "unauthorized"  # 401/403（API key 错、被吊销、没权限）
+FAIL_TIMEOUT = "timeout"            # 网络/asyncio.timeout 超时
+FAIL_SCHEMA = "schema"              # Pydantic schema 校验失败
+FAIL_UNKNOWN = "unknown"            # 其它未归类异常
+
+_last_fail_code_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_eatwhat_last_ai_fail_code",
+    default=None,
+)
+
+
+# ---------- P5-09：模块级 ContextVar helpers ----------
+
+def _reset_last_fail_code() -> None:
+    """每次 generate_* 入口调用：清除上次遗留的失败码。"""
+    _last_fail_code_var.set(None)
+
+
+def _set_last_fail_code(code: str) -> None:
+    _last_fail_code_var.set(code)
+
+
+def _classify_http_status_code(status_code: int) -> str:
+    """将 httpx.HTTPStatusError 的 status_code 映射为细分失败码。"""
+    if status_code in {401, 403}:
+        return FAIL_UNAUTHORIZED
+    if status_code in {429, 503, 529}:
+        # 429 TooManyRequests / 503 Unavailable / 529 Overload（常用云厂商过载码）
+        return FAIL_REMOTE_QUOTA
+    return FAIL_UNKNOWN
+
+
+def take_last_fail_code() -> str | None:
+    """读取并清除：返回最后一次失败码；上一次调用成功时返回 None。
+
+    协程/线程安全：基于 ContextVar 实现，每条请求/协程独立副本，不会互相覆盖。
+    """
+    value = _last_fail_code_var.get(None)
+    _last_fail_code_var.set(None)
+    return value
+
 
 class ChatService:
     """统一门面。不要在业务代码里直接引用 mock_provider / deepseek_provider。"""
+
+    @staticmethod
+    def take_last_fail_code() -> str | None:
+        """读取并清除最后一次 AI 调用的细分失败码（ContextVar 协程隔离）。"""
+        return take_last_fail_code()
 
     def __init__(
         self,
         *,
         settings: Settings,
         provider_override: AIProvider | None = None,
+        rate_limiter: AIRateLimiter | None = None,
         default_timeout_ms: int = DEFAULT_CHAT_TIMEOUT_MS,
         extra_telemetry: Mapping[str, Any] | None = None,
     ) -> None:
         self._settings = settings
         self._default_timeout_ms = int(default_timeout_ms)
         self._telemetry_base: dict[str, Any] = dict(extra_telemetry or {})
+        self._rate_limiter = rate_limiter
         # 允许测试/演示注入 mock 实例（例如 out_of_bounds_food_code 模式）
         self._provider_override = provider_override
 
@@ -69,8 +128,15 @@ class ChatService:
         user_prompt: str,
         round_index_1based: int,
         timeout_ms: int | None = None,
+        user_id: str | None = None,
     ) -> FollowUpQuestionOutput | None:
-        """生成一道最多 3 轮的追问题。失败返回 None，业务层走默认追问/直接最终生成。"""
+        """生成一道最多 3 轮的追问题。失败返回 None，业务层走默认追问/直接最终生成。
+
+        注意：追问题阶段 P5-09 的细分失败码会照常写入 ContextVar，但业务层
+        （RecommendationSessionManager）当前并不会基于它做进一步展示——毕竟
+        追问题失败只是"切回默认题"，对用户是完全透明的 fail-open。
+        """
+        _reset_last_fail_code()
         if round_index_1based < 1 or round_index_1based > 3:
             # 超出轮次上限 → 判失败，让业务层直接生成最终推荐（等价于"信息已充分"）
             log.info(
@@ -95,10 +161,14 @@ class ChatService:
             temperature=DEFAULT_FOLLOW_UP_TEMPERATURE,
             timeout_ms=timeout_ms or self._default_timeout_ms,
             telemetry_tag="follow_up",
+            user_id=user_id,
         )
         if raw is None:
             return None
-        return self._safe_validate_json(raw, FollowUpQuestionOutput, tag="follow_up")
+        validated = self._safe_validate_json(raw, FollowUpQuestionOutput, tag="follow_up")
+        if validated is None:
+            _set_last_fail_code(FAIL_SCHEMA)
+        return validated
 
     # ============== 对外：最终 5 候选生成 ==============
     async def generate_final_recommendation(
@@ -107,8 +177,14 @@ class ChatService:
         system_prompt: str,
         user_prompt: str,
         timeout_ms: int | None = None,
+        user_id: str | None = None,
     ) -> FinalRecommendationOutput | None:
-        """生成最终 5 候选。失败返回 None，业务层回退规则引擎。"""
+        """生成最终 5 候选。失败返回 None，业务层回退规则引擎。
+
+        调用后请使用 :meth:`take_last_fail_code` 读取细分失败码（若本次是
+        失败返回），用于 session.final_reason 落库细化。
+        """
+        _reset_last_fail_code()
         prompt_block = (
             f"{system_prompt}\n\n"
             f"[FINAL_GENERATION] 信息已充分，请直接给出最终 Top5 推荐，不要再追问。\n"
@@ -124,10 +200,14 @@ class ChatService:
             temperature=DEFAULT_FINAL_TEMPERATURE,
             timeout_ms=timeout_ms or self._default_timeout_ms,
             telemetry_tag="final_recommendation",
+            user_id=user_id,
         )
         if raw is None:
             return None
-        return self._safe_validate_json(raw, FinalRecommendationOutput, tag="final_rec")
+        validated = self._safe_validate_json(raw, FinalRecommendationOutput, tag="final_rec")
+        if validated is None:
+            _set_last_fail_code(FAIL_SCHEMA)
+        return validated
 
     # ============== 内部实现 ==============
     async def _raw_chat_catch_all(
@@ -137,12 +217,14 @@ class ChatService:
         temperature: float,
         timeout_ms: int,
         telemetry_tag: str,
+        user_id: str | None = None,
     ) -> str | None:
-        """实际调用 Provider，所有异常 → 返回 None。"""
+        """实际调用 Provider，所有异常 → 返回 None，并按 P5-09 分类写入 fail_code。"""
         telemetry = {**self._telemetry_base, "tag": telemetry_tag, "n_msgs": len(messages)}
         try:
             provider = self._build_provider()
         except (AIKeyEncryptionError, ValueError) as exc:
+            _set_last_fail_code(FAIL_BUILD)
             log.warning(
                 "ai_provider_build_fail tag=%s err_type=%s telemetry=%s",
                 telemetry_tag,
@@ -150,6 +232,31 @@ class ChatService:
                 telemetry,
             )
             return None
+
+        # P5-07：真实 provider 才消耗额度；Mock 本地生成不计入
+        is_mock_provider = isinstance(provider, MockAIProvider)
+        if (not is_mock_provider) and self._rate_limiter is not None:
+            rl: AIRateLimiter = self._rate_limiter
+            # user_id 未绑定时，传"匿名占位 id"，让 consume_or_reject 仍然能正确
+            # 执行全局限流（用户维度未绑则跳过，但全局计数照常）。
+            quota_user_id = user_id if user_id is not None else "__anon__"
+            result: AIRateLimitResult = await rl.consume_or_reject(user_id=quota_user_id)
+            if not result.allowed:
+                _set_last_fail_code(FAIL_LOCAL_QUOTA)
+                log.warning(
+                    "ai_quota_exceeded tag=%s reason=%s user_id=%s "
+                    "user_today=%s/%s global_today=%s/%s telemetry=%s",
+                    telemetry_tag,
+                    result.reason,
+                    user_id,
+                    result.user_today_used,
+                    result.user_limit,
+                    result.global_today_used,
+                    result.global_limit,
+                    telemetry,
+                )
+                # fail-open → 返回 None，让上层自动切规则引擎兜底
+                return None
 
         try:
             async with asyncio.timeout(timeout_ms / 1000.0):
@@ -159,6 +266,7 @@ class ChatService:
                     timeout_ms=timeout_ms,
                 )
         except TimeoutError:
+            _set_last_fail_code(FAIL_TIMEOUT)
             log.warning(
                 "ai_timeout tag=%s timeout_ms=%s telemetry=%s",
                 telemetry_tag,
@@ -166,7 +274,38 @@ class ChatService:
                 telemetry,
             )
             return None
+        except httpx.TimeoutException as exc:
+            _set_last_fail_code(FAIL_TIMEOUT)
+            log.warning(
+                "ai_httpx_timeout tag=%s err_type=%s telemetry=%s",
+                telemetry_tag,
+                type(exc).__name__,
+                telemetry,
+            )
+            return None
+        except httpx.HTTPStatusError as exc:
+            code = _classify_http_status_code(exc.response.status_code)
+            _set_last_fail_code(code)
+            log.warning(
+                "ai_http_status tag=%s status=%s classified=%s telemetry=%s",
+                telemetry_tag,
+                exc.response.status_code,
+                code,
+                telemetry,
+            )
+            return None
+        except httpx.HTTPError as exc:
+            # ConnectError / NetworkError 等非 2xx / 非超时类网络错误
+            _set_last_fail_code(FAIL_UNKNOWN)
+            log.warning(
+                "ai_httpx_error tag=%s err_type=%s telemetry=%s",
+                telemetry_tag,
+                type(exc).__name__,
+                telemetry,
+            )
+            return None
         except Exception as exc:  # noqa: BLE001 - 设计上，任何 AI 失败都不能把推荐打挂
+            _set_last_fail_code(FAIL_UNKNOWN)
             log.warning(
                 "ai_call_fail tag=%s err_type=%s telemetry=%s",
                 telemetry_tag,
@@ -236,3 +375,4 @@ class ChatService:
                 self._telemetry_base,
             )
             return None
+

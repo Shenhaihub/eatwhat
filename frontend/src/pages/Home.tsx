@@ -1,8 +1,31 @@
-import { Link } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router';
+
+type HomeLocationState = { readonly deleted?: boolean };
 
 export default function Home() {
+  const location = useLocation();
+  const [showDeletedToast, setShowDeletedToast] = useState(false);
+
+  // P4-05：删除账号成功后，Settings 会 nav('/', {state: {deleted:true}}) → 这里显示 2.5s 成功 toast
+  useEffect(() => {
+    const state = location.state as HomeLocationState | null | undefined;
+    if (state?.deleted) {
+      setShowDeletedToast(true);
+      const t = window.setTimeout(() => setShowDeletedToast(false), 2500);
+      return () => window.clearTimeout(t);
+    }
+    return undefined;
+  }, [location.state]);
+
   return (
     <div className="page-shell placeholder-page">
+      {showDeletedToast ? (
+        <div className="toast-success" role="status" aria-live="polite">
+          账号及全部推荐历史已成功删除，期待下次再见 👋
+        </div>
+      ) : null}
+
       <p className="eyebrow">先定方向，再找附近</p>
       <h1>别再纠结，先决定吃什么</h1>
       <p>回答几组会根据你选择变化的问题。需要 AI 时再登录，选定食物后帮你查附近商家。</p>

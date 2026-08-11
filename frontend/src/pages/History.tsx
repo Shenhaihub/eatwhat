@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { api } from '../services/api/client';
 import type { HistoryRecord } from '../services/api/types';
 import type { RecommendationItem } from '../services/api/types/food';
+import { describeFinalReason } from '../lib/sourceBadge';
 
 const PAGE_SIZE = 20;
 
@@ -198,6 +199,20 @@ export default function History() {
                       </time>
                       {r.result_count > 0 ? (
                         <span className="history-card-count">{r.result_count} 道菜</span>
+                      ) : null}
+                      {(r.final_reason ?? undefined) !== undefined ? (
+                        (() => {
+                          const meta = describeFinalReason(r.final_reason);
+                          return (
+                            <span
+                              className={`source-badge source-badge--${meta.variant}`}
+                              role="note"
+                              aria-label={meta.accessibleLabel}
+                            >
+                              {meta.label}
+                            </span>
+                          );
+                        })()
                       ) : null}
                     </div>
                     <button

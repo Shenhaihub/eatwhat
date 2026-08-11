@@ -763,6 +763,54 @@ button {
   color: var(--color-primary);
   border: 1px solid color-mix(in oklab, var(--color-primary) 30%, var(--color-border));
 }
+.toast-success {
+  background: color-mix(in oklab, var(--color-success, #27a073) 10%, var(--color-bg));
+  color: var(--color-success, #27a073);
+  border: 1px solid color-mix(in oklab, var(--color-success, #27a073) 30%, var(--color-border));
+}
+
+/* ============================================================
+ * P5-08：来源 badge —— Recommend 结果顶栏 & History 卡片头通用
+ * 三种 variant：ai (绿) / fallback (黄) / legacy (灰)
+ * ============================================================ */
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+}
+.source-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.65;
+}
+.source-badge--ai {
+  background: color-mix(in oklab, var(--color-success, #27a073) 14%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-success, #27a073) 45%, var(--color-border));
+  color: var(--color-success, #27a073);
+}
+.source-badge--fallback {
+  background: color-mix(in oklab, #f5a623 14%, var(--color-surface));
+  border-color: color-mix(in oklab, #f5a623 45%, var(--color-border));
+  color: #c67c00;
+}
+.source-badge--legacy {
+  /* 继承默认灰色，这里显式声明保持可读性 */
+  background: color-mix(in oklab, var(--color-text-muted) 8%, var(--color-surface));
+  border-color: color-mix(in oklab, var(--color-text-muted) 30%, var(--color-border));
+  color: var(--color-text-muted);
+}
 
 /* --- 通用 input --- */
 .input {

@@ -82,6 +82,12 @@ class Settings(BaseSettings):
     amap_api_key: str = ""
     poi_cache_ttl_seconds: int = 1200
 
+    # ============== Redis（P5-07B 多 worker 限流；不填 = 用进程内 TTLCache）==============
+    # 格式：redis://[[username]:[password]]@host:port[/db]
+    # 示例 1：本地默认无密码单实例 → redis://localhost:6379/0
+    # 示例 2：Sentinel/Cluster 请先改造 RedisRateLimiter，本字段目前只支持单节点
+    redis_url: str = ""
+
     frontend_origins: str = "http://localhost:5173"
     public_min_sample_size: int = 3
 

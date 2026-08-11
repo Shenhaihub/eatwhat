@@ -470,7 +470,9 @@ async def recommendations_session_start(
     assert settings is not None  # Depends(get_settings) 保证非空；防御 mypy
     # 1) 创建会话 + 尝试生成第 1 道 AI 追问
     mgr = get_recommendation_session_manager(settings)
+    uid = current_user.user_id if current_user is not None else None
     session = mgr.create_session(
+        user_id=uid,
         questionnaire_answers_by_qid=payload.answers_by_question_id,
         questionnaire_version=payload.questionnaire_version,
         dictionary_version=dict_version,

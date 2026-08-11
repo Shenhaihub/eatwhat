@@ -27,6 +27,7 @@ import type {
   RecommendationItem,
   SessionStateResponseV1,
 } from '../services/api/types';
+import { describeFinalReason } from '../lib/sourceBadge';
 import '../styles/recommendations.css';
 
 const QUESTIONNAIRE_VERSION = 'v1.0';
@@ -127,6 +128,9 @@ export default function Recommend() {
   const [expandLevel, setExpandLevel] = useState<1 | 3 | 5>(1);
   // P5-02A：AI Stepper 当前 active 阶段（1..4）。loading=true 时由 useEffect 按节奏推进。
   const [aiStage, setAiStage] = useState<AiStage>(4);
+  // P5-08：最终推荐的来源标记。followUpSession 在进入结果态时会被清空，所以单独存一份。
+  //   - "ai_finalized" / "rule_engine_fallback_ai_fail" / "legacy_rule_engine" / null
+  const [resultFinalReason, setResultFinalReason] = useState<string | null>(null);
   const debounceTimer = useRef<number | null>(null);
   const fetchSeq = useRef(0);
   const recAbort = useRef<AbortController | null>(null);
@@ -275,9 +279,11 @@ export default function Recommend() {
         );
         if (startResp.stage === 'final') {
           finalItems = startResp.candidates ?? null;
+          setResultFinalReason(startResp.final_reason ?? null);
         } else {
           // follow_up：保存会话，交给 follow_up UI 分支
           setRecState({ loading: false, error: null, items: null });
+          setResultFinalReason(null);
           setFollowUpSession(startResp);
           return;
         }
@@ -293,6 +299,7 @@ export default function Recommend() {
           { signal: controller.signal },
         );
         finalItems = legacy;
+        setResultFinalReason('legacy_rule_engine');
       }
       if (finalItems == null) {
         throw new Error('G-08 违规：服务端未返回候选');
@@ -311,6 +318,7 @@ export default function Recommend() {
             ? err.message
             : '推荐失败，请稍后重试';
       setFollowUpSession(null);
+      setResultFinalReason(null);
       setRecState({ loading: false, error: message, items: null });
     }
   }, [answers]);
@@ -336,6 +344,7 @@ export default function Recommend() {
           if (!items) throw new Error('G-08 违规：final 阶段未返回 candidates');
           const sorted = [...items].sort((a, b) => a.priority - b.priority);
           setFollowUpSession(null);
+          setResultFinalReason(resp.final_reason ?? null);
           setRecState({ loading: false, error: null, items: sorted });
           setExpandLevel(1);
         } else {
@@ -375,6 +384,7 @@ export default function Recommend() {
       setRecState({ loading: false, error: null, items: null });
       setFollowUpSession(null);
       setAnswerLoading(false);
+      setResultFinalReason(null);
       if (typeof window !== 'undefined') window.localStorage.removeItem(DRAFT_KEY);
     },
     [],
@@ -384,6 +394,7 @@ export default function Recommend() {
     setRecState({ loading: false, error: null, items: null });
     setFollowUpSession(null);
     setAnswerLoading(false);
+    setResultFinalReason(null);
   }, []);
 
   return (
@@ -398,10 +409,34 @@ export default function Recommend() {
       </h1>
 
       {isResultView ? (
-        <p className="microcopy" style={{ marginBottom: 'var(--space-4)' }}>
-          以下推荐来源于确定性规则引擎（P2-02）；越靠前的越匹配你刚刚回答的偏好。
-          {followUpSession?.final_reason ? `（生成来源：${followUpSession.final_reason}）` : ''}
-        </p>
+        (() => {
+          const meta = describeFinalReason(resultFinalReason);
+          return (
+            <>
+              <p className="microcopy" style={{ marginBottom: 'var(--space-3)' }}>
+                {meta.summaryText ??
+                  '以下推荐来源于确定性规则引擎；越靠前的越匹配你刚刚回答的偏好。'}
+              </p>
+              <div
+                style={{
+                  marginBottom: 'var(--space-4)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-2)',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span
+                  className={`source-badge source-badge--${meta.variant}`}
+                  role="note"
+                  aria-label={meta.accessibleLabel}
+                >
+                  {meta.label}
+                </span>
+              </div>
+            </>
+          );
+        })()
       ) : followUpSession ? (
         <p className="microcopy" style={{ marginBottom: 'var(--space-4)' }}>
           为了让推荐更贴近你当下的口味，我们会补充问几个维度。最多 3 轮，随时可提前得出结果。
