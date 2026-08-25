@@ -157,7 +157,7 @@ async def recommendations_generate(
         raw_body: Any = await request.json()
     except json.JSONDecodeError:
         raw_body = {}
-    except Exception:  # noqa: BLE001
+    except Exception:
         raw_body = {}
 
     source_type_paths = _find_source_type_keys(raw_body)
@@ -497,7 +497,7 @@ def _try_merge_recent_preferences_into_answers(
         from app.api.v1.preferences import load_recent_preference_snapshots
 
         snaps = load_recent_preference_snapshots(sb=sb, user_id=current_user.user_id, limit=3)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log = logging.getLogger("app.api.v1.recommendations")
         log.warning("preference_merge_load_fail user=%s err=%r", current_user.user_id, exc)
         return empty
@@ -541,12 +541,12 @@ def _try_merge_recent_preferences_into_answers(
         try:
             validated = type(answers).model_validate(filtered_raw)
             filtered_typed = validated.model_dump(mode="python")
-        except Exception:  # noqa: BLE001 - 类型校验失败就 fallback 为 raw，至少不影响主流程
+        except Exception:
             filtered_typed = filtered_raw
         for k, v in filtered_typed.items():
             try:
                 object.__setattr__(answers, k, v)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # frozen / 不可写对象：跳过
                 break
         # P7-07：构建 diff
@@ -557,17 +557,16 @@ def _try_merge_recent_preferences_into_answers(
         for k in SINGLE_FIELDS:
             b = before.get(k)
             a = after.get(k)
-            if b != a:
-                if (b in (None, [], "")) and (a not in (None, [], "")):
-                    diff.append(
-                        {
-                            "field": k,
-                            "kind": "single",
-                            "before": b,
-                            "after": a,
-                            "change": "filled",
-                        }
-                    )
+            if b != a and (b in (None, [], "")) and (a not in (None, [], "")):
+                diff.append(
+                    {
+                        "field": k,
+                        "kind": "single",
+                        "before": b,
+                        "after": a,
+                        "change": "filled",
+                    }
+                )
         for k in LIST_FIELDS:
             b_list: list[Any] = list(before.get(k) or [])
             a_list: list[Any] = list(after.get(k) or [])
@@ -586,7 +585,7 @@ def _try_merge_recent_preferences_into_answers(
         b_fua: dict[str, Any] = before.get("ai_follow_up_answers") or {}
         a_fua: dict[str, Any] = after.get("ai_follow_up_answers") or {}
         if isinstance(b_fua, dict) and isinstance(a_fua, dict):
-            added_keys = sorted(k for k in a_fua.keys() if k not in b_fua)
+            added_keys = sorted(k for k in a_fua if k not in b_fua)
             if added_keys:
                 added_map = {k: a_fua[k] for k in added_keys}
                 diff.append(
@@ -607,7 +606,7 @@ def _try_merge_recent_preferences_into_answers(
             len(diff),
         )
         return diff
-    except Exception as exc:  # noqa: BLE001 - 绝不阻塞主推荐
+    except Exception as exc:
         logger.warning("preference_merge_apply_fail user=%s err=%r", current_user.user_id, exc)
         return empty
 
@@ -640,7 +639,7 @@ def _hydrate_session_preference_context(
         session.preference_context = summary
         # P7-05：实际合并条数（summary 非空才算有效合并；空串意味着"有快照但无有效总结"，count 保留原值 0）
         session.preference_context_snapshot_count = len(snaps) if summary else 0
-    except Exception as exc:  # noqa: BLE001 - fail-open
+    except Exception as exc:
         session.preference_context = ""
         session.preference_context_snapshot_count = 0
         logger.warning(
@@ -722,7 +721,7 @@ def _try_autowrite_history_if_user(
                 final_reason=final_reason,
             ),
         )
-    except Exception as exc:  # noqa: BLE001 - 不阻塞主流程
+    except Exception as exc:
         logger.warning("history_autowrite_failed user=%s err=%r", current_user.user_id, exc)
         hist_resp = None
 
@@ -747,7 +746,7 @@ def _try_autowrite_history_if_user(
                 snapshot=snapshot_dump,
             ),
         )
-    except Exception as exc:  # noqa: BLE001 - 绝对不阻塞主推荐流程
+    except Exception as exc:
         logger.warning("preference_autowrite_failed user=%s err=%r", current_user.user_id, exc)
         pref_err_reason = f"{type(exc).__name__}: {exc}"
         pref_resp = None
@@ -804,7 +803,7 @@ async def recommendations_session_start(
         raw_body: Any = await request.json()
     except json.JSONDecodeError:
         raw_body = {}
-    except Exception:  # noqa: BLE001
+    except Exception:
         raw_body = {}
 
     payload, _bank, rule_answers, merged_pref_fields = _validate_and_load_for_session_start(
@@ -942,7 +941,7 @@ async def recommendations_session_answer(
         raw_body: Any = await request.json()
     except json.JSONDecodeError:
         raw_body = {}
-    except Exception:  # noqa: BLE001
+    except Exception:
         raw_body = {}
     source_type_paths = _find_source_type_keys(raw_body)
     if source_type_paths:

@@ -231,7 +231,7 @@ class TestSecurity:
             },
         )
         assert r.status_code == 200
-        assert "access-control-allow-origin" in {k.lower() for k in r.headers.keys()}
+        assert "access-control-allow-origin" in {k.lower() for k in r.headers}
 
 
 # ============================================================

@@ -45,6 +45,6 @@ __all__ = [
     "questionnaire_router",
     "recommendations_router",
     "restaurants_router",
-    "system_v1_router",
     "router",
+    "system_v1_router",
 ]

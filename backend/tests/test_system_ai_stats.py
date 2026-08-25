@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -14,7 +14,7 @@ from app.core.ai_stats import (
     compute_stats,
     configure_ai_call_logging,
 )
-from app.core.config import Settings, get_settings
+from app.core.config import get_settings
 from app.main import create_app
 
 
@@ -28,7 +28,7 @@ def client(tmp_path_factory: pytest.TempPathFactory) -> TestClient:
         update={"ai_call_meta_file": "", "ai_stats_buffer_size": 500, "log_dir": str(safe_dir)},
         deep=True,
     )
-    AiCallMetaStore._instance = None  # noqa: SLF001  reset singleton
+    AiCallMetaStore._instance = None
     configure_ai_call_logging(settings)
     app = create_app(settings)
     return TestClient(app)
@@ -38,7 +38,7 @@ def _make(ts_offset: int, *, stage: str, pref_used: bool, total_chars: int, outc
     now = 1_700_000_000 + ts_offset
     return AiCallMetaRecord(
         ts=now,
-        ts_iso=datetime.fromtimestamp(now, tz=timezone.utc).isoformat(),
+        ts_iso=datetime.fromtimestamp(now, tz=UTC).isoformat(),
         ai_stage=stage,
         session_id=f"sess_{ts_offset}",
         user_id=f"user_{ts_offset % 3}",
@@ -105,7 +105,6 @@ def test_stats_computation_and_pii_obfuscation(client: TestClient) -> None:
     assert b["breakdown_by_stage"]["follow_up"]["pref_used_rate"] == pytest.approx(6 / 8, rel=1e-3)
     assert b["breakdown_by_stage"]["final"]["calls"] == 4
     # outcome breakdown
-    outcome_ok_count = 8  # idx 0,1,2,3,6,7,9,10,11? 数：ok 数是
     outcome_ok = 0
     for r in records:
         if r.ai_outcome == "ok":

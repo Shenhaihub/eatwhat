@@ -79,7 +79,7 @@ async def questionnaire_next(
     except json.JSONDecodeError:
         # body 不是合法 JSON → 让 Pydantic 抛空对象校验失败（422），信息更准确
         raw_body = {}
-    except Exception:  # noqa: BLE001 - 其他异常也归为非法请求体
+    except Exception:
         raw_body = {}
 
     # 1) G-07：递归检查 source_type，命中直接 400 BAD_REQUEST

@@ -56,7 +56,7 @@ def ensure_session_json() -> dict[str, Any]:
             if obj.get("access_token") and obj.get("user", {}).get("email"):
                 print(f"[E2E.Browser] 复用现有 session JSON: {SESSION_JSON}")
                 return obj
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"[E2E.Browser] session JSON 损坏需重建：{exc}")
 
     # 走 _make_e2e_session.prepare_test_account（若文件不存在，fallback：直接 import 它的函数）
@@ -80,7 +80,7 @@ def dummy_fill_questionnaire(page) -> None:
     for _ in range(max_iters):
         try:
             page.wait_for_selector("form.questionnaire-form, [data-testid='goto-recommendations']", timeout=8000)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return
 
         # 若按钮已经可点 → 直接返回
@@ -168,7 +168,7 @@ def write_history_via_frontend_proxy(session_json: dict[str, Any]) -> None:
                 print("[E2E.Browser] POST /history via Vite proxy → 201 OK")
             else:
                 print(f"[E2E.Browser] POST /history via Vite proxy → HTTP {code}，继续不阻塞主流程")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[E2E.Browser] POST /history via Vite proxy 失败（继续）：type={type(exc).__name__} msg={exc}")
 
 
@@ -307,7 +307,7 @@ def main() -> int:
             browser.close()
             print("[E2E.Browser] ALL ✅ OK")
             return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[E2E.Browser.FAILED] type={type(exc).__name__} msg={exc}", file=sys.stderr)
         return 1
     finally:

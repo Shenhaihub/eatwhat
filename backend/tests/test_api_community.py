@@ -28,7 +28,6 @@ from app.api.v1 import community as _community_mod
 from app.api.v1.auth import CurrentUser, get_current_user, get_current_user_optional
 from app.main import create_app
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -36,7 +35,7 @@ from app.main import create_app
 # 每次测试前重建社区内存单例，避免测试间互相污染
 @pytest.fixture(autouse=True)
 def _reset_community_store():
-    _community_mod._STORE = _community_mod._CommunityStore()  # noqa: SLF001
+    _community_mod._STORE = _community_mod._CommunityStore()
     yield
 
 

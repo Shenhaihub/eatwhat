@@ -336,7 +336,6 @@ class RecommendationSessionManager:
         # P5-09：AI 细分失败码（成功 = None，失败 = build/local_quota/remote_quota/
         # unauthorized/timeout/schema/unknown）
         fail_code = self._chat_service.take_last_fail_code()
-        final_reason_before: str | None = None
 
         if ai_out is not None:
             try:
@@ -344,7 +343,6 @@ class RecommendationSessionManager:
                 if len(items) == 5:
                     session.final_items = items
                     session.final_reason = "ai_gain"
-                    final_reason_before = "ai_gain"
                     self._log_ai_call_meta(
                         ai_stage="final",
                         session=session,
@@ -356,7 +354,7 @@ class RecommendationSessionManager:
                         final_reason=session.final_reason,
                     )
                     return list(items)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning(
                     "ai_to_items_failed session=%s err_type=%s",
                     session.session_id,
@@ -557,9 +555,7 @@ class RecommendationSessionManager:
                 return True
             if t.question_id == "ai_fu_001_cuisine" and cuisine_covered:
                 return True
-            if t.question_id == "ai_fu_002_flavor" and flavor_covered:
-                return True
-            return False
+            return bool(t.question_id == "ai_fu_002_flavor" and flavor_covered)
 
         start_idx = max(round_index_1based - 1, 0)
         for idx in range(start_idx, len(FOLLOW_UP_TEMPLATES)):
@@ -584,11 +580,7 @@ class RecommendationSessionManager:
             return True
         if q.question_id == "ai_fu_001_cuisine" and self._cuisine_dimension_covered(session):
             return True
-        if q.question_id == "ai_fu_002_flavor" and bool(
-            getattr(session.rule_answers, "tastes", None)
-        ):
-            return True
-        return False
+        return bool(q.question_id == "ai_fu_002_flavor" and bool(getattr(session.rule_answers, "tastes", None)))
 
     # ============== GC：惰性清理过期会话 ==============
     def _maybe_gc_unlocked(self) -> None:

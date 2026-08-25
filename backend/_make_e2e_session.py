@@ -79,9 +79,9 @@ def _cleanup_user_if_exists(sb, email: str) -> None:
             try:
                 sb.auth.admin.delete_user(str(u.id))
                 print(f"[E2E.Cleanup] 已删除旧账号: uid={u.id}")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 print(f"[E2E.Cleanup] 删除旧账号失败（继续）：type={type(exc).__name__}")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[E2E.Cleanup] list_users 失败（跳过清理）：type={type(exc).__name__}")
 
 
@@ -92,7 +92,7 @@ def _create_or_signin_user(sb, email: str, pwd: str):
         print("[E2E.Sign] signup uid:", r.user.id if r.user else None)
         if r.user and r.session:
             return r.user, r.session
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print("[E2E.Sign] signup skip:", type(exc).__name__)
     r = sb.auth.sign_in_with_password({"email": email, "password": pwd})
     if not r.user or not r.session:
@@ -391,12 +391,12 @@ def main() -> int:
             try:
                 sb_admin.auth.admin.get_user_by_id(user_id_for_cleanup)
                 print("[E2E.Cleanup.WARN] Supabase admin 查询用户仍然存在（可能级联删除延迟或后端删除逻辑未物理删除，需人工核查）")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # get_user_by_id 找不到用户会抛错——这正是我们期望的物理删除结果
                 print("[E2E.Cleanup] VERIFIED：Supabase auth.users 中已不存在该 e2e 用户（GDPR OK）")
         print("[E2E.ALL OK]")
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[E2E.FAILED] type={type(exc).__name__} msg={exc}", file=sys.stderr)
         return 1
     finally:
@@ -406,7 +406,7 @@ def main() -> int:
                 UUID(user_id_for_cleanup)  # 合法性校验
                 sb_admin.auth.admin.delete_user(user_id_for_cleanup)
                 print(f"[E2E.Cleanup] finally 删除测试账号 uid={user_id_for_cleanup}")
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 # delete_user 抛错有两种情况：①用户本来就被 DELETE /auth/me 删了；②网络/权限错。
                 # 这里只打一条 debug 信息，不影响 exit code
                 print(f"[E2E.Cleanup] finally 清理失败（可能用户已被 GDPR 删除，属预期）：type={type(exc).__name__}")

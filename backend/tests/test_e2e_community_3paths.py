@@ -28,7 +28,7 @@ from app.main import create_app
 
 @pytest.fixture(autouse=True)
 def _reset_community_store():
-    _community_mod._STORE = _community_mod._CommunityStore()  # noqa: SLF001
+    _community_mod._STORE = _community_mod._CommunityStore()
     yield
 
 

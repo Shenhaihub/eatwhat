@@ -28,7 +28,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.v1.auth import CurrentUser, get_current_user, get_current_user_optional
 
-
 log = logging.getLogger("app.api.v1.community")
 
 router = APIRouter(prefix="/api/v1/community", tags=["community"])
@@ -210,7 +209,7 @@ class _CommunityStore:
             return
         base: dict[str, set[str]] = {"jp": set(), "kr": set()}
         # 预置一些随机票数，展示上不至于 0 / 0
-        rng = random.Random(2026081701)
+        random.Random(2026081701)
         # 先塞些假 user_id 的票（真实用户看到的「已投」不包含这些假 id，因为 get_me 返回的是 auth.id）
         for i in range(142):
             base["jp"].add(f"seed_jp_{i}")
@@ -235,7 +234,7 @@ class _CommunityStore:
         for item in self.feed_items:
             if item.id == feed_id:
                 # 真实点赞 = seed 基数 + set 里真实用户（去掉 seed_jp_ / seed_kr_ 这种前缀假用户）
-                real_likes = sum(1 for u in users if not (u.startswith("seed_jp_") or u.startswith("seed_kr_")))
+                real_likes = sum(1 for u in users if not (u.startswith(("seed_jp_", "seed_kr_"))))
                 item.likes = _MOCK_LIKES_BASE.get(item.id, 0) + real_likes
                 return item.likes, duplicated
         raise KeyError(feed_id)
@@ -491,7 +490,7 @@ async def vote_community_theme(
 
     # 1) 已投同一选项 → 幂等直接返回
     if user_id in per_option[option_key]:
-        _STORE._refresh_vote_cache()  # noqa: SLF001
+        _STORE._refresh_vote_cache()
         return ThemeVoteResponse(
             ok=True,
             voted_key=option_key,
@@ -513,7 +512,7 @@ async def vote_community_theme(
 
     # 3) 首次投票 → 累加
     per_option[option_key].add(user_id)
-    _STORE._refresh_vote_cache()  # noqa: SLF001
+    _STORE._refresh_vote_cache()
     return ThemeVoteResponse(
         ok=True,
         voted_key=option_key,

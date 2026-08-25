@@ -502,7 +502,7 @@ class AmapPOIProvider:
                         return data
                     logger.error("amap_non_dict_response type=%s", type(data).__name__)
                     return None
-            except Exception as exc:  # noqa: BLE001 — 统一捕获 httpx/解码错误
+            except Exception as exc:
                 last_exc = exc
                 logger.warning(
                     "amap_http_attempt_failed attempt=%d/%d err=%s",

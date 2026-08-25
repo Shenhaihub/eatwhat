@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import base64
 import copy
-import hashlib
 import json
 import logging
 import uuid
@@ -29,9 +28,6 @@ from postgrest.types import CountMethod
 from app.core.config import Settings
 from app.core.supabase_client import SupabaseAdminClient
 from app.main import create_app
-from app.schemas.enums import BudgetTier, MealPeriod, Taste
-from app.schemas.food import QuestionnaireAnswers
-
 
 # ============================================================
 # Mock Supabase：内存实现 user_recommendations + user_preference_snapshots
@@ -49,7 +45,7 @@ def _now_iso() -> str:
 class _MockTable:
     """模拟 `sb.table("xxx")` 链式：select/insert/delete/eq/order/limit/count/execute。"""
 
-    def __init__(self, storage: dict[str, list[dict[str, Any]]], table: str, auth_state: "_AuthState") -> None:
+    def __init__(self, storage: dict[str, list[dict[str, Any]]], table: str, auth_state: _AuthState) -> None:
         self._storage = storage
         self._table = table
         self._auth = auth_state
@@ -63,37 +59,37 @@ class _MockTable:
         self._insert_rows: list[dict[str, Any]] | None = None
 
     # ---------- chainable filters ----------
-    def select(self, cols: str = "*") -> "_MockTable":
+    def select(self, cols: str = "*") -> _MockTable:
         self._select_cols = [c.strip() for c in cols.split(",")] if cols != "*" else None
         return self
 
-    def eq(self, col: str, val: Any) -> "_MockTable":
+    def eq(self, col: str, val: Any) -> _MockTable:
         self._filters.append((col, "eq", val))
         return self
 
-    def neq(self, col: str, val: Any) -> "_MockTable":
+    def neq(self, col: str, val: Any) -> _MockTable:
         self._filters.append((col, "neq", val))
         return self
 
-    def order(self, col: str, *, desc: bool = False) -> "_MockTable":
+    def order(self, col: str, *, desc: bool = False) -> _MockTable:
         self._orders.append((col, desc))
         return self
 
-    def limit(self, n: int) -> "_MockTable":
+    def limit(self, n: int) -> _MockTable:
         self._limit = n
         return self
 
-    def range(self, offset: int, end: int) -> "_MockTable":
+    def range(self, offset: int, end: int) -> _MockTable:
         self._offset = offset
         self._limit = end - offset + 1
         return self
 
-    def delete(self, count: CountMethod | None = None) -> "_MockTable":
+    def delete(self, count: CountMethod | None = None) -> _MockTable:
         self._delete = True
         self._count = count
         return self
 
-    def insert(self, rows: Any) -> "_MockTable":
+    def insert(self, rows: Any) -> _MockTable:
         self._insert_rows = copy.deepcopy(rows if isinstance(rows, list) else [rows])
         return self
 
@@ -186,7 +182,7 @@ class _AuthState:
 
 
 class _MockPostgrestClient:
-    def __init__(self, storage: dict[str, list[dict[str, Any]]], auth_state: "_AuthState") -> None:
+    def __init__(self, storage: dict[str, list[dict[str, Any]]], auth_state: _AuthState) -> None:
         self._storage = storage
         self._auth = auth_state
 
@@ -195,7 +191,7 @@ class _MockPostgrestClient:
 
 
 class _MockAuthAdmin:
-    def __init__(self, auth_state: "_AuthState") -> None:
+    def __init__(self, auth_state: _AuthState) -> None:
         self._auth = auth_state
 
     def get_user(self, user_id: str) -> Any:
@@ -217,7 +213,7 @@ class _MockAuthAdmin:
 
 
 class _MockSupabaseAdminClient(SupabaseAdminClient):
-    def __init__(self, storage: dict[str, list[dict[str, Any]]], auth_state: "_AuthState", settings: Settings) -> None:
+    def __init__(self, storage: dict[str, list[dict[str, Any]]], auth_state: _AuthState, settings: Settings) -> None:
         self._storage = storage
         self._auth = auth_state
         self._pgclient = _MockPostgrestClient(storage, auth_state)
@@ -286,20 +282,20 @@ def _make_token(user_id: str, email: str = "e2e@example.com") -> str:
 # TestClient 构建
 # ============================================================
 
-SETTINGS_OVERRIDES = dict(
-    _env_file=None,
-    app_env="test",
-    app_mode="mock",
-    poi_provider="mock",
-    ai_provider="mock",
-    ai_api_key="",
-    ew_ai_key_passphrase="",
-    ew_ai_salt="",
-    mock_ai_mode="normal",
-    supabase_url="https://example.supabase.co",
-    supabase_service_role_key="eyJhbGciOi.eyJ9.FAKE",
-    supabase_anon_key="eyJhbGciOi.eyJ9.FAKE_ANON",
-)
+SETTINGS_OVERRIDES = {
+    "_env_file": None,
+    "app_env": "test",
+    "app_mode": "mock",
+    "poi_provider": "mock",
+    "ai_provider": "mock",
+    "ai_api_key": "",
+    "ew_ai_key_passphrase": "",
+    "ew_ai_salt": "",
+    "mock_ai_mode": "normal",
+    "supabase_url": "https://example.supabase.co",
+    "supabase_service_role_key": "eyJhbGciOi.eyJ9.FAKE",
+    "supabase_anon_key": "eyJhbGciOi.eyJ9.FAKE_ANON",
+}
 
 
 def _build_e2e_app(monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, _MockSupabaseAdminClient]:
@@ -462,7 +458,7 @@ def test_p7_01_e2e_complete_gdpr_loop(monkeypatch: pytest.MonkeyPatch, caplog) -
     r_export = client.get("/api/v1/auth/me/export", headers=auth)
     assert r_export.status_code == 200, f"导出接口应为 200，实际 {r_export.status_code}:{r_export.text}"
     exp = r_export.json()
-    assert "exported_at" in exp and exp["exported_at"], "顶层 exported_at 字段缺失"
+    assert exp.get("exported_at"), "顶层 exported_at 字段缺失"
     assert exp["user_meta"]["user_id"] == user_id, f"导出 user_id 不匹配 {exp['user_meta']}"
     assert exp["user_meta"]["email"] == "e2e@example.com"
     # history_count / pref_count 计数应与之前累计的相符（≥2 条 history，≥2 条 preference）
@@ -477,8 +473,8 @@ def test_p7_01_e2e_complete_gdpr_loop(monkeypatch: pytest.MonkeyPatch, caplog) -
     assert r_del.status_code == 204, f"GDPR 删除接口应为 204，实际 {r_del.status_code}:{r_del.text}"
 
     # ---------- 8. 最终两表 0 条 ----------
-    assert sb._count_history(user_id) == 0, f"history 应为 0 条（GDPR CASCADE 不满足？）"
-    assert sb._count_preferences(user_id) == 0, f"preferences 应为 0 条（GDPR CASCADE 不满足？）"
+    assert sb._count_history(user_id) == 0, "history 应为 0 条（GDPR CASCADE 不满足？）"
+    assert sb._count_preferences(user_id) == 0, "preferences 应为 0 条（GDPR CASCADE 不满足？）"
 
 
 # P8-01a 专项：冷启动画像合并 + merged_pref_fields 细粒度断言
@@ -615,7 +611,7 @@ def test_p8_01a_preference_merge_detailed(monkeypatch: pytest.MonkeyPatch) -> No
     m2 = b2.get("merged_pref_fields")
     assert isinstance(m2, list), f"merged_pref_fields 应为 list，实际 {type(m2)}"
     fields2 = [f.get("field") for f in m2]
-    kinds2 = [f.get("kind") for f in m2]
+    [f.get("kind") for f in m2]
     # 结构校验：每个 merged 条目形状都合法
     for f in m2:
         assert isinstance(f, dict), f"merged 条目应为 dict：{f!r}"

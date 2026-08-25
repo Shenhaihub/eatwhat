@@ -138,6 +138,8 @@ class ChatService:
         未登录（user_id=None）返回 0 used 但保留 limit。"""
         from .rate_limiter import (
             AIRateLimiterLocal,
+        )
+        from .rate_limiter import (
             _day_key as _rl_day_key,  # 避免重名
         )
 
@@ -216,7 +218,7 @@ class ChatService:
                     await self._rate_limiter.rollback_consume(
                         user_id=user_id if user_id is not None else "__anon__"
                     )
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     log.warning(
                         "ai_quota_rollback_schema_fail tag=follow_up "
                         "err_type=%s",
@@ -267,7 +269,7 @@ class ChatService:
                     await self._rate_limiter.rollback_consume(
                         user_id=user_id if user_id is not None else "__anon__"
                     )
-                except Exception as exc:  # noqa: BLE001 - 告警即可，不阻塞主返回
+                except Exception as exc:
                     log.warning(
                         "ai_quota_rollback_schema_fail tag=final_recommendation "
                         "err_type=%s",
@@ -375,7 +377,7 @@ class ChatService:
                 type(exc).__name__,
                 telemetry,
             )
-        except Exception as exc:  # noqa: BLE001 - 设计上，任何 AI 失败都不能把推荐打挂
+        except Exception as exc:
             _set_last_fail_code(FAIL_UNKNOWN)
             log.warning(
                 "ai_call_fail tag=%s err_type=%s telemetry=%s",
@@ -388,7 +390,7 @@ class ChatService:
         if raw_out is None and rate_limiter_applied and self._rate_limiter is not None:
             try:
                 await self._rate_limiter.rollback_consume(user_id=quota_user_id)
-            except Exception as exc:  # noqa: BLE001 - 限流回滚失败只告警，不影响主返回
+            except Exception as exc:
                 log.warning(
                     "ai_quota_rollback_fail tag=%s err_type=%s telemetry=%s",
                     telemetry_tag,

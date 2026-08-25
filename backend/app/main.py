@@ -15,8 +15,8 @@ from starlette.responses import Response
 
 from app.api.system import router as system_router
 from app.api.v1 import router as questionnaire_v1_router
-from app.core.config import Settings, get_settings
 from app.core.ai_stats import configure_ai_call_logging
+from app.core.config import Settings, get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware

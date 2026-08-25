@@ -251,7 +251,7 @@ class AIRateLimiterRedis:
         """尝试 SCRIPT LOAD；不支持时返回 None（让上层走 EVAL 兜底）。"""
         try:
             return await self._redis.script_load(_LUA_INCR_CHECK)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("ai_rate_limiter_redis_script_load_skip err_type=%s msg=%s", type(exc).__name__, exc)
             return None
 
@@ -297,7 +297,7 @@ class AIRateLimiterRedis:
             try:
                 result = await self._redis.evalsha(sha, num_keys, user_key, global_key, ul, gl, ttl)
                 return self._build_result(result)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 msg = str(exc).upper()
                 is_noscript = "NOSCRIPT" in msg
                 if is_noscript:
@@ -311,7 +311,7 @@ class AIRateLimiterRedis:
                         try:
                             result = await self._redis.evalsha(new_sha, num_keys, user_key, global_key, ul, gl, ttl)
                             return self._build_result(result)
-                        except Exception as exc2:  # noqa: BLE001
+                        except Exception as exc2:
                             log.info(
                                 "ai_rate_limiter_redis_evalsha_retry_fail err_type=%s",
                                 type(exc2).__name__,
@@ -328,7 +328,7 @@ class AIRateLimiterRedis:
         try:
             result = await self._redis.eval(_LUA_INCR_CHECK, num_keys, user_key, global_key, ul, gl, ttl)
             return self._build_result(result)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             return self._failsafe_result(exc)
 
     def _failsafe_result(self, exc: Exception) -> AIRateLimitResult:
@@ -352,7 +352,7 @@ class AIRateLimiterRedis:
         """应用关闭时主动断开 Redis 连接（可选）。"""
         try:
             await self._redis.aclose()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("ai_rate_limiter_redis_close err_type=%s", type(exc).__name__)
 
     async def rollback_consume(self, *, user_id: str) -> None:
@@ -361,7 +361,7 @@ class AIRateLimiterRedis:
         user_key = f"{_USER_KEY_PREFIX}{day}:{user_id}"
         global_key = f"{_GLOBAL_KEY_PREFIX}{day}"
         try:
-            async with self._redis.pipeline(transaction=True) as pipe:
+            async with self._redis.pipeline(transaction=True):
                 # DECR 后若 < 0 → 再 SET 0（防止并发/多次 rollback 产生负数），
                 # 用先 DECR 再 SETRANGE/CLAMP：Redis 没有 CLAMP 命令，所以先 GET
                 for k in (user_key, global_key):
@@ -373,7 +373,7 @@ class AIRateLimiterRedis:
                     if cur > 0:
                         # 直接 SET cur-1 比 DECR + 再判断更原子且少一次 round-trip
                         await self._redis.set(k, str(cur - 1), keepttl=True)
-        except Exception as exc:  # noqa: BLE001 - 限流返还失败最多"多扣一次"，不影响主流程
+        except Exception as exc:
             log.warning(
                 "ai_rate_limiter_redis_rollback_fail err_type=%s msg=%s",
                 type(exc).__name__,

@@ -121,7 +121,7 @@ def load_recent_preference_snapshots(
             .limit(limit)
             .execute()
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("preference_load_fail user=%s err=%r", user_id, exc)
         return []
     return [_row_to_response(r) for r in res.data]
@@ -166,7 +166,7 @@ def write_user_preference_snapshot(
     try:
         try:
             result = sb.client.table(_TABLE).insert(insert_payload).execute()
-        except Exception as first_exc:  # noqa: BLE001
+        except Exception as first_exc:
             # 检测是否"缺 snapshot_version 列"；是则去掉该字段重试（向前兼容旧 DB 结构）
             first_msg = str(first_exc).lower()
             if "snapshot_version" in first_msg and (

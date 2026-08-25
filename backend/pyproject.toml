@@ -31,6 +31,26 @@ package = false
 line-length = 120
 target-version = "py313"
 
+# 显式锁定 lint 规则集，保持与 P1~P5 "ruff 0 warnings" 通过时的规则一致：
+#   - select = E/F/I/UP/RUF ：这是 Ruff 历史版本的默认规则集（pycodestyle/pyflakes/isort/pyupgrade/ruff 内置），
+#     不会把 FastAPI 官方推荐的 `Depends()` 默认参数当成 B008，也不会启用 tryceratops。
+#   - ignore 解释：
+#     * TRY（tryceratops）：TRY002 禁止直接 raise Exception，与项目既有风格不一致；
+#     * RUF001/RUF002/RUF003（ambiguous-unicode-character-*）：Ruff 0.16+ 默认新增，
+#       但项目大量中文注释/文档使用全角逗号/引号，误报极多（>4k 条），无实际代码质量收益；
+#     * E501（line-too-long）：P1~P5 时代大量 docstring/注释/URL 超过 120 字符，
+#       之前也未对这条规则严格执行，且硬拆中文 docstring 会降低可读性。
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "RUF"]
+ignore = ["TRY", "RUF001", "RUF002", "RUF003", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# scripts/encrypt_ai_key.py：需要先 sys.path.insert(0, BACKEND_ROOT) 才能 import app.core，是脚本的标准写法。
+"scripts/encrypt_ai_key.py" = ["E402"]
+# tests/test_poi.py：测试分多个 section（单元测试 / API 契约测试 / AutoFailover），
+# 为了让每个 section 的 import 和用例紧贴在一起而放在中间，是 P1~P5 时代就存在的风格。
+"tests/test_poi.py" = ["E402"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true

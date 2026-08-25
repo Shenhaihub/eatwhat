@@ -15,13 +15,13 @@ G-16 合规：
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class POIProviderName(str, Enum):
+class POIProviderName(StrEnum):
     """POI 数据来源（名词表 §5）。"""
 
     MOCK = "mock"

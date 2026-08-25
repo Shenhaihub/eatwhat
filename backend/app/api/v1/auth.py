@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 import httpx
@@ -134,7 +134,7 @@ async def _fetch_jwk_for_header(kid: str, settings: Settings) -> dict[str, Any] 
         _JWKS_CACHE[cache_key] = keys
         _JWKS_CACHE_AT[cache_key] = now
         return keys.get(kid)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("auth_jwks_fetch_failed url=%s err=%r", jwks_url, exc)
         return None
 
@@ -296,7 +296,7 @@ async def send_magic_link(
                 path = "/auth/callback"
             netloc = f"{host}:{port}" if port else host
             return urlunsplit((scheme, netloc, path, "", ""))
-        except Exception:  # noqa: BLE001
+        except Exception:
             return _DEFAULT_REDIRECT
 
     redirect_to_clean = _strip_redirect(raw_redirect)
@@ -314,7 +314,7 @@ async def send_magic_link(
                 cand = qs["next"][0]
                 if cand.startswith("/"):
                     next_path = cand
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
     if not next_path.startswith("/"):
         next_path = "/"
@@ -372,7 +372,7 @@ async def send_magic_link(
         )
         log.info("auth_magic_link_sent ok email=%s", email)
         return MagicLinkResponse(sent=True, email=email)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         code: str | None = getattr(exc, "code", None)
         message: str | None = getattr(exc, "message", None)
         exc_text = repr(exc).lower()
@@ -527,7 +527,7 @@ async def export_account_data(
         for attr in ("email", "phone", "is_sso_user"):
             if attr in u_obj and u_obj[attr] is not None:
                 user_meta[attr] = u_obj[attr]
-        if "identities" in u_obj and u_obj["identities"]:
+        if u_obj.get("identities"):
             identities: list[dict[str, Any]] = []
             for i in u_obj["identities"] or []:
                 idict = i if isinstance(i, dict) else (i.model_dump() if hasattr(i, "model_dump") else vars(i))
@@ -539,7 +539,7 @@ async def export_account_data(
             for k in ("full_name", "name", "picture", "avatar_url", "locale"):
                 if k in um and um[k] is not None:
                     user_meta.setdefault(k, um[k])
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         partial.append(f"user_meta_fetch_error: {type(exc).__name__}")
         log.warning("account_export_meta_skip user=%s err=%r", current.user_id, exc)
 
@@ -554,7 +554,7 @@ async def export_account_data(
             .execute()
         )
         history_items = list(res.data or [])
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         partial.append(f"history_fetch_error: {type(exc).__name__}")
         log.warning("account_export_history_skip user=%s err=%r", current.user_id, exc)
 
@@ -569,12 +569,12 @@ async def export_account_data(
             .execute()
         )
         pref_items = list(res.data or [])
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         partial.append(f"preference_fetch_error: {type(exc).__name__}")
         log.warning("account_export_preference_skip user=%s err=%r", current.user_id, exc)
 
     payload: dict[str, Any] = {
-        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "exported_at": datetime.now(UTC).isoformat(),
         "user_meta": user_meta,
         "recommendation_history": history_items,
         "recommendation_history_count": len(history_items),
@@ -600,7 +600,7 @@ async def logout(
         # （真实吊销：sb.client.auth.admin.sign_out(current.user_id) 但会吊销该用户所有会话）
         sb_ok.client.auth.sign_out()
         revoked = True
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("auth_sign_out_failed user_id=%s err=%r", current.user_id, exc)
     return LogoutResponse(success=True, revoked=revoked)
 
@@ -630,7 +630,7 @@ async def delete_account(
             .execute()
         )
         deleted_history = int(hist_res.count or 0)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("account_delete_history_skip user=%s err=%r", current.user_id, exc)
         deleted_history = -1
 
@@ -643,7 +643,7 @@ async def delete_account(
             .execute()
         )
         deleted_preferences = int(pref_res.count or 0)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("account_delete_preference_skip user=%s err=%r", current.user_id, exc)
         deleted_preferences = -1
 

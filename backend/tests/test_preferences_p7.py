@@ -13,8 +13,8 @@ import copy
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from unittest.mock import Mock
-from typing import Any, Literal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -39,7 +39,7 @@ class _MockTable:
         self,
         storage: dict[str, list[dict[str, Any]]],
         table: str,
-        auth_state: "_AuthState",
+        auth_state: _AuthState,
     ) -> None:
         self._storage = storage
         self._table = table
@@ -53,55 +53,55 @@ class _MockTable:
         self._count: CountMethod | None = None
         self._insert_rows: list[dict[str, Any]] | None = None
 
-    def select(self, cols: str = "*", count: Any = None) -> "_MockTable":
+    def select(self, cols: str = "*", count: Any = None) -> _MockTable:
         self._select_cols = [c.strip() for c in cols.split(",")] if cols != "*" else None
         if count is not None:
             self._count = count
         return self
 
-    def eq(self, col: str, val: Any) -> "_MockTable":
+    def eq(self, col: str, val: Any) -> _MockTable:
         self._filters.append((col, "eq", val))
         return self
 
-    def neq(self, col: str, val: Any) -> "_MockTable":
+    def neq(self, col: str, val: Any) -> _MockTable:
         self._filters.append((col, "neq", val))
         return self
 
-    def lt(self, col: str, val: Any) -> "_MockTable":
+    def lt(self, col: str, val: Any) -> _MockTable:
         self._filters.append((col, "lt", val))
         return self
 
-    def le(self, col: str, val: Any) -> "_MockTable":
+    def le(self, col: str, val: Any) -> _MockTable:
         self._filters.append((col, "le", val))
         return self
 
-    def gt(self, col: str, val: Any) -> "_MockTable":
+    def gt(self, col: str, val: Any) -> _MockTable:
         self._filters.append((col, "gt", val))
         return self
 
-    def gte(self, col: str, val: Any) -> "_MockTable":
+    def gte(self, col: str, val: Any) -> _MockTable:
         self._filters.append((col, "gte", val))
         return self
 
-    def order(self, col: str, *, desc: bool = False) -> "_MockTable":
+    def order(self, col: str, *, desc: bool = False) -> _MockTable:
         self._orders.append((col, desc))
         return self
 
-    def limit(self, n: int) -> "_MockTable":
+    def limit(self, n: int) -> _MockTable:
         self._limit = n
         return self
 
-    def range(self, offset: int, end: int) -> "_MockTable":
+    def range(self, offset: int, end: int) -> _MockTable:
         self._offset = offset
         self._limit = end - offset + 1
         return self
 
-    def delete(self, count: CountMethod | None = None) -> "_MockTable":
+    def delete(self, count: CountMethod | None = None) -> _MockTable:
         self._delete = True
         self._count = count
         return self
 
-    def insert(self, rows: Any) -> "_MockTable":
+    def insert(self, rows: Any) -> _MockTable:
         self._insert_rows = copy.deepcopy(rows if isinstance(rows, list) else [rows])
         return self
 
@@ -204,7 +204,7 @@ class _AuthState:
 
 
 class _MockPostgrestClient:
-    def __init__(self, storage: dict[str, list[dict[str, Any]]], auth_state: "_AuthState") -> None:
+    def __init__(self, storage: dict[str, list[dict[str, Any]]], auth_state: _AuthState) -> None:
         self._storage = storage
         self._auth = auth_state
 
@@ -225,7 +225,7 @@ class _MockAuth:
 
 
 class _MockAuthAdmin:
-    def __init__(self, auth_state: "_AuthState") -> None:
+    def __init__(self, auth_state: _AuthState) -> None:
         self._auth = auth_state
 
     def get_user_by_id(self, user_id: str) -> Any:

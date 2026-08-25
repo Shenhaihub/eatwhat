@@ -48,7 +48,7 @@ async def search_restaurants(request: Request) -> dict[str, Any]:
         raw_body: Any = await request.json()
     except json.JSONDecodeError:
         raw_body = {}
-    except Exception:  # noqa: BLE001
+    except Exception:
         raw_body = {}
 
     if not isinstance(raw_body, dict):

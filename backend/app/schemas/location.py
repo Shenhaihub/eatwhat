@@ -9,12 +9,12 @@ G-16 契约：
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class LocationSource(str, Enum):
+class LocationSource(StrEnum):
     """地点来源（名词表 §5）。"""
 
     BROWSER = "browser"

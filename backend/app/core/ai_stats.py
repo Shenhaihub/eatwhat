@@ -17,11 +17,12 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import time
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from app.core.config import Settings
 
@@ -69,7 +70,7 @@ class AiCallMetaRecord:
         }
 
     @classmethod
-    def from_record(cls, record: logging.LogRecord) -> "AiCallMetaRecord | None":
+    def from_record(cls, record: logging.LogRecord) -> AiCallMetaRecord | None:
         """从 logging.LogRecord 中抽取 ai_call 字段（通过 record.__dict__['extra']）。
 
         返回 None 表示这条 record 不是 ai_call_meta。
@@ -80,10 +81,10 @@ class AiCallMetaRecord:
         # 只处理 _log_ai_call_meta 固定格式的 info 前缀
         if not msg.startswith("ai_call "):
             return None
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         ts = record.created
-        ts_iso = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        ts_iso = datetime.fromtimestamp(ts, tz=UTC).isoformat()
 
         def _pick(keys: Iterable[str], default: Any) -> Any:
             d = record.__dict__
@@ -132,7 +133,7 @@ class AiCallMetaRecord:
         )
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "AiCallMetaRecord":
+    def from_dict(cls, d: dict[str, Any]) -> AiCallMetaRecord:
         return cls(
             ts=float(d.get("ts") or 0.0),
             ts_iso=str(d.get("ts_iso") or ""),
@@ -156,7 +157,7 @@ class AiCallMetaRecord:
 class AiCallMetaStore:
     """进程内单例缓冲（deque maxlen）+ 可选 JSONL 追加落盘。"""
 
-    _instance: "AiCallMetaStore | None" = None
+    _instance: AiCallMetaStore | None = None
     _instance_lock = threading.Lock()
 
     def __init__(self, maxlen: int, persist_path: Path | None = None) -> None:
@@ -168,12 +169,12 @@ class AiCallMetaStore:
             try:
                 persist_path.parent.mkdir(parents=True, exist_ok=True)
                 self._persist_fh = persist_path.open("a", encoding="utf-8", buffering=1)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # 落盘失败不影响缓冲 & 不影响主流程
                 self._persist_fh = None
 
     @classmethod
-    def instance(cls) -> "AiCallMetaStore":
+    def instance(cls) -> AiCallMetaStore:
         """未初始化前返回空 store（仅用于 test/冷启动场景）。"""
         with cls._instance_lock:
             if cls._instance is None:
@@ -181,7 +182,7 @@ class AiCallMetaStore:
             return cls._instance
 
     @classmethod
-    def configure(cls, settings: Settings) -> "AiCallMetaStore":
+    def configure(cls, settings: Settings) -> AiCallMetaStore:
         """首次（应用启动）配置单例，并尝试从 JSONL 回填最近部分记录。"""
         log_dir = Path(settings.log_dir)
         if not log_dir.is_absolute():
@@ -195,17 +196,17 @@ class AiCallMetaStore:
             try:
                 raw = persist_path.read_text(encoding="utf-8").splitlines()
                 take = raw[-settings.ai_stats_buffer_size:] if len(raw) > settings.ai_stats_buffer_size else raw
-                with store._lock:  # noqa: SLF001
+                with store._lock:
                     for line in take:
                         line = line.strip()
                         if not line:
                             continue
                         try:
                             d = json.loads(line)
-                            store._buf.append(AiCallMetaRecord.from_dict(d))  # noqa: SLF001
-                        except Exception:  # noqa: BLE001
+                            store._buf.append(AiCallMetaRecord.from_dict(d))
+                        except Exception:
                             continue
-            except Exception:  # noqa: BLE001
+            except Exception:
                 # 回填失败不影响
                 pass
         with cls._instance_lock:
@@ -225,7 +226,7 @@ class AiCallMetaStore:
             if self._persist_fh is not None:
                 try:
                     self._persist_fh.write(json.dumps(rec.to_dict(), ensure_ascii=False) + "\n")
-                except Exception:  # noqa: BLE001
+                except Exception:
                     # 写文件失败不影响内存缓冲
                     pass
 
@@ -242,10 +243,10 @@ class AiCallMetaStore:
 class AiCallMetaLogHandler(logging.Handler):
     """挂到 `app.services.recommendation_session` logger 的 handler。"""
 
-    def emit(self, record: logging.LogRecord) -> None:  # noqa: D401
+    def emit(self, record: logging.LogRecord) -> None:
         try:
             AiCallMetaStore.instance().push_log_record(record)
-        except Exception:  # noqa: BLE001
+        except Exception:
             # 观测链路失败绝不影响主业务
             pass
 
