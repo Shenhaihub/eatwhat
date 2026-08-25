@@ -42,7 +42,8 @@ def bank_v1():
 class TestBankIntegrity:
     def test_load_default_bank_ok(self, bank_v1):
         assert bank_v1.questionnaire_version == "v1.0"
-        assert len(bank_v1.questions) == 6
+        # P1：新增 q07_cuisine_preference，题库扩展到 7 题
+        assert len(bank_v1.questions) == 7
 
     def test_all_question_ids_unique(self, bank_v1):
         ids = [q.question_id for q in bank_v1.questions]
@@ -95,8 +96,8 @@ class TestAiRecommendFullPath:
             "q02_explicit_food",
             "q03_budget",
         }
-        # next 应该先给 required 中的前两个
-        assert res.next_question_ids[:2] == ["q01_meal_period", "q02_explicit_food"]
+        # next 应该先给 required 中的第 1 个（P1 改成 MAX_QUESTIONS_PER_STEP = 1，单题单列聚焦）
+        assert res.next_question_ids[:1] == ["q01_meal_period"]
 
     def test_ai_recommend_all_required_answered_complete(self, bank_v1):
         # Q1/Q2/Q3 三道基础答完 = complete（自适应题可以不答，非 required）

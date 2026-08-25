@@ -321,6 +321,105 @@
   cursor: progress;
 }
 
+/* ========== P5-02A：AI 等待加载增强 ========== */
+
+/* 动态阶段文案 */
+.ai-stage-message {
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--color-primary);
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in oklab, var(--color-primary) 8%, var(--color-surface));
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in oklab, var(--color-primary) 20%, var(--color-border));
+  animation: ai-fade-in 0.3s ease-out;
+}
+
+@keyframes ai-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 短延迟极简加载提示 */
+.ai-wait-minimal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.ai-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: ai-spin 0.8s linear infinite;
+}
+
+@keyframes ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 超时重试选项 */
+.ai-timeout-notice {
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed color-mix(in oklab, #e6a23c 50%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, #e6a23c 8%, var(--color-surface));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.ai-timeout-notice p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+
+.ai-timeout-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* 追问加载骨架屏 */
+.follow-up-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.follow-up-loading-message {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-primary);
+  text-align: center;
+  padding: var(--space-2);
+}
+
+.follow-up-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.follow-up-skeleton-options {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 /* ========== P5-02：动态追问 ========== */
 .follow-up-shell {
   display: flex;

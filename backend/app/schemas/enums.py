@@ -42,6 +42,7 @@ class Taste(str, Enum):
     SOUR = "sour"
     SWEET = "sweet"
     SALTY = "salty"
+    GARLIC = "garlic"  # P1 扩充：蒜香（韩式烤肉/蒜蓉菜常见，用户可能明确说"不要蒜"）
 
 
 class ExplicitPreference(str, Enum):
@@ -59,6 +60,12 @@ class MedicalAllergen(str, Enum):
     DAIRY = "dairy"
     GLUTEN = "gluten"
     EGG = "egg"
+    # P1 扩充：常见东亚饮食过敏原/敏感成分（非 8 大类但免责提醒很重要）
+    SESAME = "sesame"        # 芝麻（FDA 2023 起列为美国主要过敏原第 9 类）
+    BUCKWHEAT = "buckwheat"  # 荞麦（日本/韩国常见过敏原标签）
+    GARLIC = "garlic"        # 大蒜（敏感人群不少，归到allergen用于免责）
+    PORK = "pork"            # 猪肉（宗教/过敏 双重原因）
+    SAUSAGE = "sausage"      # 香肠/加工肉（含亚硝酸盐+猪成分，免责标识用）
 
 
 # 食物菜系/分类族（为规则引擎和 G-12 差异化准备）
@@ -73,6 +80,10 @@ class CuisineGroup(str, Enum):
     SNACK = "snack"
     BAKERY = "bakery"
     BEVERAGE = "beverage"
+    # P1 修复：菜系偏好显式字段——用户在问卷里选择"日韩/西餐/中餐"时，规则引擎能据此强惩罚不匹配
+    JAPANESE = "japanese"
+    KOREAN = "korean"
+    WESTERN = "western"
 
 
 # 常见食用时段（由食物自然场景决定，规则引擎再按用户偏好加权）

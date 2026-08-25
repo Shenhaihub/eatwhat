@@ -1,11 +1,13 @@
 # EatWhat 实施计划与状态
 
 > 这是项目后续执行的唯一实时计划清单。  
-> 最后更新：2026-08-11  
+> 最后更新：2026-08-24  
 > 当前阶段：P5 动态 AI 接入（P4 已完成并推送，进入 API Key 加密框架 → MockAIProvider 契约 → DeepSeek Live）  
 > 当前任务：P5-03 开始 —— API Key 多层加密框架（Fernet 对称加密 + 环境变量前缀 `ENC:` + 仅内存解密，永不落盘明文）→ 多 Provider 抽象契约（Mock/DeepSeek，统一 chat 接口）→ MockAIProvider（正常/超时/非法 JSON/越界 food_code 四种输出模式，全部失败回退规则结果）；AI Provider 用户已确认为 **DeepSeek V4 Flash**（国内最低成本路径，加密框架完成后用户后续填加密后 key 值）。  
 > 清单进度：**36/50 已完成，2 项进行中，12 项待开始**（API Key 加密框架 + MockAIProvider 契约同步推进）  
 > 工程状态：P4 已提交并推送（main 分支，GitHub 远端 Shenhaihub/eatwhat@private）；前端完整页面（Recommend 问卷+结果+1→3→5、History、Settings、Nearby 地点+商户、AuthContext 登录保护、路由守卫、Login/AuthCallback Magic Link 页）；backend FastAPI：P0–P4 全模块就绪 + user_recommendations 表 Supabase RLS 已启用 + 死 token 存活检查（写 history 前 `sb.auth.admin.get_user_by_id` 校验用户仍存在）；后端 `pyproject.toml` 已含 `cryptography>=50.0.0`（Fernet 就绪）。
+
+> 本次维护记录：EatWhat 固定开发端口维持 `5173`（前端）与 `8000`（后端），`start-dev.bat` 已增加端口预检、后端健康检查和前端监听检查；浏览器规范地址为 `http://localhost:5173/`，后端默认 CORS 同时允许 `localhost` 与 `127.0.0.1`。同机《纸上百工》改用 `5183/4183`，避免两个项目的 Vite/离线演示端口相撞。
 
 ## 1. 使用规则
 
@@ -879,6 +881,17 @@
   - DELETE 资源返回 204 No Content 时，前端 JSON 解析必须分支处理，不能统一 `.json()`。
   - E2E session 注入必须同时支持 window 对象 + URL hash，因为 `location.reload()` 会清空 window 自定义属性。
 - 对后续的影响：P4 账户/历史/删除闭环完成，GDPR 删除权生效，数据归属与安全防线加固。下一步是 **P5 动态 AI 接入**，用户已明确选型 **DeepSeek V4 Flash**（国内最低成本路径），核心子任务与验收顺序已在 §8 钉死：API Key 多层加密（Fernet）→ MockAIProvider 契约（超时/非法/越界全回退）→ 动态追问 + 等待 UI → 最终候选 1→3→5 渐进展示（不能再推迟）→ 配额账本。
+
+### 2026-08-24 — PLAN-032（本地端口与主机名契约收敛）
+
+- 状态：已完成；不改变 P5 产品路线，只修复本地双项目启动边界。
+- 做了什么：
+  1. `start-dev.bat` 启动前检查 `8000/5173` 是否已有监听进程；冲突时打印端口和 PID 并退出，不再打开半成功的子窗口。
+  2. 后端启动后轮询 `/health/live`，前端启动后检查 `5173` 监听，只有两端就绪才输出成功地址。
+  3. `backend/app/core/config.py` 默认 CORS 同时登记 `http://localhost:5173,http://127.0.0.1:5173`；认证回调仍以 `localhost` 为规范值，兼容测试和 Supabase 白名单。
+  4. 同机《纸上百工》迁移开发端口 `5183`、离线演示端口 `4183`，并同步其 README、演示指南和启动器。
+- 影响：EatWhat 的固定端口暂不改；改变端口会同时影响 Vite 代理、Magic Link 回调、CORS、文档和已有手测脚本。项目间通过端口所有权和启动前检查隔离。
+- 验证边界：已完成静态配置/文档核对；未在当前已有监听进程环境中强行启动或终止用户进程，干净环境启动验收仍需另行执行。
 
 ## 8. 下一次继续时的操作顺序
 

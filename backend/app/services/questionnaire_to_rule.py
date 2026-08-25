@@ -19,6 +19,7 @@ from app.schemas import (
     Appetite,
     Avoidance,
     BudgetTier,
+    CuisineGroup,
     ExplicitPreference,
     MealPeriod,
     QuestionnaireAnswers,
@@ -39,6 +40,8 @@ _SCALAR_ENUM_BY_FIELD: dict[str, type[Any]] = {
 _ARRAY_ENUM_BY_FIELD: dict[str, type[Any]] = {
     "avoidances": Avoidance,
     "tastes": Taste,
+    # P1 修复：菜系偏好映射
+    "cuisine_preferences": CuisineGroup,
 }
 
 
@@ -114,6 +117,11 @@ def questionnaire_answers_by_qid_to_rule_input(
         explicit_food_preference=_to_scalar_enum(
             "explicit_food_preference",
             collected_by_field["explicit_food_preference"],
+        ),
+        # P1 修复：菜系偏好从 q07 题目映射进来
+        cuisine_preferences=_to_array_enum(
+            "cuisine_preferences",
+            collected_by_field["cuisine_preferences"],
         ),
         # P3/P5 才会出这两维的题
         max_distance_m=None,

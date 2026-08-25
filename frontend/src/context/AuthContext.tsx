@@ -39,8 +39,12 @@ interface AuthContextValue {
   loading: boolean;
   /** 是否已登录 */
   isAuthenticated: boolean;
-  /** 发送 magic link 邮件 */
-  sendMagicLink: (email: string, redirectTo?: string) => Promise<void>;
+  /** 发送 magic link 邮件
+   * @param email - 目标邮箱
+   * @param redirectTo - Supabase 回调基址（默认自动用 window.location.origin/auth/callback）
+   * @param nextPath - 登录成功后跳转路径（不放在 redirectTo query，走 localStorage + cookie 双通道）
+   */
+  sendMagicLink: (email: string, redirectTo?: string, nextPath?: string) => Promise<void>;
   /** 注销（清除本地 session + 通知后端）。
    *
    * @param options.skipServer - 默认 false。传 true 时只清本地不调 Supabase SDK
@@ -156,39 +160,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [sb]);
 
   const sendMagicLink = useCallback(
-    async (email: string, redirectTo?: string) => {
+    async (email: string, redirectTo?: string, nextPath?: string) => {
       if (!sb) throw new Error('Supabase 客户端未初始化');
-      // 走后端统一入口（便于审计 + 统一 redirect_to 默认值）
+      // 走后端统一入口（便于审计 + 统一 redirect_to 默认值 + 配置错误明报）
       // 若后端不可用，直接用前端 SDK 兜底，保证 MVP 可用
       try {
         const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
+        // 从 redirectTo 的 ?next= 中解析 nextPath（没显式传 nextPath 时）
+        let resolvedNext = nextPath ?? null;
+        let cleanRedirect = redirectTo ?? `${window.location.origin}/auth/callback`;
+        if (!resolvedNext) {
+          try {
+            const u = new URL(cleanRedirect, window.location.origin);
+            const qNext = u.searchParams.get('next');
+            if (qNext && qNext.startsWith('/')) {
+              resolvedNext = qNext;
+            }
+            // 把 redirectTo 自身的 query/fragment 剥掉（白名单匹配更稳）
+            u.search = '';
+            u.hash = '';
+            cleanRedirect = u.toString();
+          } catch {
+            /* 忽略 parse 失败 */
+          }
+        }
         const resp = await fetch(`${API_BASE_URL}/auth/magic-link`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email,
-            redirect_to: redirectTo ?? `${window.location.origin}/auth/callback`,
+            redirect_to: cleanRedirect,
+            ...(resolvedNext ? { next_path: resolvedNext } : {}),
           }),
         });
-        if (!resp.ok) throw new Error(`后端发送失败: ${resp.status}`);
-        try {
-          const body = (await resp.json()) as { sent?: boolean; error_code?: string | null };
-          if (body.sent === false) {
-            // 后端明确失败（如 NETWORK_SUPABASE）：fallback 到前端 SDK 直连
-            throw new Error(`后端 sent=false: ${body.error_code ?? 'unknown'}`);
-          }
-        } catch {
-          // 非 JSON 响应时按原样忽略（兼容旧实现）
+        if (!resp.ok) throw new Error(`后端发送失败: HTTP ${resp.status}`);
+        const body = (await resp.json()) as {
+          sent?: boolean;
+          error_code?: string | null;
+          error_message?: string | null;
+        };
+        if (body.sent === false) {
+          // 后端明确失败：NETWORK / AUTH_INVALID_REDIRECT / AUTH_RATE_LIMIT 等
+          // 不要 fallback 到前端 SDK（会掩盖同样的 Supabase 配置错误）
+          const msg =
+            body.error_message?.trim() ||
+            `发送登录链接失败（${body.error_code ?? 'unknown'}），请稍后重试。`;
+          const err = new Error(msg);
+          (err as Error & { code?: string | null }).code = body.error_code ?? null;
+          throw err;
         }
-      } catch {
-        // 前端 SDK 兜底：直接调 Supabase signInWithOtp
-        await sb.auth.signInWithOtp({
-          email,
-          options: {
-            emailRedirectTo: redirectTo ?? `${window.location.origin}/auth/callback`,
-            shouldCreateUser: true,
-          },
-        });
+      } catch (err0) {
+        const e = err0 instanceof Error ? err0 : new Error(String(err0));
+        // 仅当错误是"后端网络/网关层不可用（未给出结构化响应）"时才 fallback 到前端 SDK；
+        // 后端 sent=false 的业务/配置错误一律直接抛出，显示给用户排查。
+        const msg = e.message;
+        const isBackendStructuredError =
+          /(?:AUTH_INVALID_REDIRECT|AUTH_RATE_LIMIT|AUTH_CONFIG|AUTH_SUPABASE|BACKEND_UNKNOWN|NETWORK_SUPABASE|sent=false)/.test(
+            msg,
+          );
+        if (!isBackendStructuredError) {
+          await sb.auth.signInWithOtp({
+            email,
+            options: {
+              emailRedirectTo: redirectTo ?? `${window.location.origin}/auth/callback`,
+              shouldCreateUser: true,
+            },
+          });
+          return;
+        }
+        throw e;
       }
     },
     [sb],

@@ -235,16 +235,18 @@ def recompute_questionnaire(
         next_action = "proceed_questionnaire"
 
     # Step 8. next_question_ids & next_questions：按问题库原始顺序，
-    # 取"active 且 未有效回答 且 required 优先"的前 2 题；同时返回题对象（前端无需二次查）
+    # 取"active 且 未有效回答 且 required 优先"的前 1 题（UI 视觉上更聚焦；
+    # 答完再推下一题）；同时返回题对象（前端无需二次查）
     next_ids: list[str] = []
+    MAX_QUESTIONS_PER_STEP = 1
     missing_ids_ordered = [qid for qid in required_qids if qid in required_missing]
     for qid in missing_ids_ordered:
         if qid not in effectively_answered and qid in active_set:
             next_ids.append(qid)
-            if len(next_ids) >= 2:
+            if len(next_ids) >= MAX_QUESTIONS_PER_STEP:
                 break
-    # 若 required 还差 0 或不够 2，再补非 required 的 active+未答题
-    if len(next_ids) < 2:
+    # 若 required 还差 0 或不够 1，再补非 required 的 active+未答题
+    if len(next_ids) < MAX_QUESTIONS_PER_STEP:
         for q in bank.questions:
             qid = q.question_id
             if (
@@ -254,7 +256,7 @@ def recompute_questionnaire(
                 and qid not in next_ids
             ):
                 next_ids.append(qid)
-                if len(next_ids) >= 2:
+                if len(next_ids) >= MAX_QUESTIONS_PER_STEP:
                     break
     next_questions_items: list[Any] = [
         questions_by_id[qid] for qid in next_ids if qid in questions_by_id

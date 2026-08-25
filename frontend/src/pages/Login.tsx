@@ -34,8 +34,17 @@ export default function Login() {
     }
     setSubmitting(true);
     try {
-      const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnTo)}`;
-      await sendMagicLink(email.trim(), redirectTo);
+      // P8-01b 修复：next 跳转不再拼进 redirectTo 的 query（会被 Supabase 白名单拒绝），
+      // 改为 localStorage.auth_return_to_v1 + 后端 Set-Cookie auth_return_to 双通道。
+      if (returnTo && returnTo.startsWith('/')) {
+        try {
+          localStorage.setItem('auth_return_to_v1', returnTo);
+        } catch {
+          /* ignore storage error */
+        }
+      }
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      await sendMagicLink(email.trim(), redirectTo, returnTo);
       setSent(true);
     } catch (err2) {
       setErr(err2 instanceof Error ? err2.message : '发送失败，请稍后重试');

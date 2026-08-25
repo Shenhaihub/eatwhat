@@ -7,8 +7,18 @@
  */
 
 import type {
+  CommunityFeedListResponse,
+  CommunityFeedSort,
+  CommunityLikeResponse,
+  CommunityThemeResponse,
+  CommunityThemeVoteRequest,
+  CommunityThemeVoteResponse,
+  CommunityTrendingResponse,
   DemoLocationListResponse,
   DemoLocationSelectResponse,
+  FeedbackSubmitRequest,
+  FeedbackSubmitResponse,
+  FeedbackTypeOption,
   HistoryDeleteAllResponse,
   HistoryListResponse,
   HistoryRecord,
@@ -17,14 +27,21 @@ import type {
   LocationReverseResponseV1,
   LocationSearchRequestV1,
   LocationSearchResponseV1,
+  PreferenceDeleteAllResponse,
+  PreferenceListResponse,
+  PreferenceSnapshot,
+  PreferenceWriteRequest,
   QuestionnaireNextRequestV1,
   QuestionnaireRecomputeResult,
   RecommendationsGenerateRequestV1,
   RecommendationsGenerateResponseV1,
+  ReportRequest,
+  ReportResponse,
   RestaurantSearchRequestV1,
   RestaurantSearchResponseV1,
   SessionAnswerRequestV1,
   SessionStateResponseV1,
+  SystemAiStatsResponse,
 } from './types';
 import { createAccessTokenGetter } from '../../context/AuthContext';
 
@@ -309,5 +326,162 @@ export const api = {
    */
   accountDelete(options?: Omit<RequestOptions, 'method' | 'body'>): Promise<void> {
     return requestJson<void>('/auth/me', { ...options, method: 'DELETE' });
+  },
+
+  // -------- 用户偏好画像（P6-01 / P6-03） --------
+  /**
+   * P6-01：GET /preferences
+   * 当前用户的偏好画像快照列表（append-only，created_at DESC 分页）。需要登录。
+   *
+   * - 分页模式优先：传 before 走 cursor，传 offset 走传统 offset；都不传默认取第一页（offset=0）。
+   * - cursor 模式适合 Timeline 点击"加载更多"，避免 offset 在高并发写入场景下漏/重。
+   */
+  preferenceList(
+    params: { limit?: number; offset?: number; before?: string } = {},
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<PreferenceListResponse> {
+    const q = new URLSearchParams();
+    if (params.limit != null) q.set('limit', String(params.limit));
+    if (params.before != null) {
+      q.set('before', params.before);
+    } else if (params.offset != null) {
+      q.set('offset', String(params.offset));
+    }
+    const query = q.toString();
+    return api.get<PreferenceListResponse>(`/preferences${query ? `?${query}` : ''}`, options);
+  },
+
+  /**
+   * P6-01：GET /preferences/latest
+   * 最近一条画像（用户首页个性化卡片使用）。无记录返回 HTTP 404。
+   */
+  preferenceLatest(options?: Omit<RequestOptions, 'method' | 'body'>): Promise<PreferenceSnapshot> {
+    return api.get<PreferenceSnapshot>('/preferences/latest', options);
+  },
+
+  /**
+   * P6-01：POST /preferences
+   * 前端一般不用手动调，后端 /recommendations 登录态会自动写。
+   */
+  preferenceCreate(
+    request: PreferenceWriteRequest,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<PreferenceSnapshot> {
+    return api.post<PreferenceSnapshot>('/preferences', request, options);
+  },
+
+  /**
+   * P6-01：DELETE /preferences/{id}
+   * 删除单条快照（不归你的会 404）。
+   */
+  preferenceDelete(id: string, options?: Omit<RequestOptions, 'method' | 'body'>): Promise<void> {
+    return requestJson<void>(`/preferences/${encodeURIComponent(id)}`, { ...options, method: 'DELETE' });
+  },
+
+  /**
+   * P6-01：DELETE /preferences
+   * 清空当前用户的全部偏好画像（用于"重置我的画像"）。返回删除条数。
+   */
+  preferenceDeleteAll(options?: Omit<RequestOptions, 'method' | 'body'>): Promise<PreferenceDeleteAllResponse> {
+    return requestJson<PreferenceDeleteAllResponse>('/preferences', { ...options, method: 'DELETE' });
+  },
+
+  // -------- 观测仪表盘（P7-03 / P7-09） --------
+  /**
+   * P7-09：GET /system/ai-stats
+   * 最近 N 条 ai_call_meta 的整体观测（sample_size、画像使用率、prompt 长度分布、outcome 分布）。
+   * 后端对 user_id/session_id 做 sha1_10 脱敏，样本记录只用于内部观测。
+   */
+  systemAiStats(
+    params: { limit?: number; stage?: 'follow_up' | 'final' } = {},
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<SystemAiStatsResponse> {
+    const q = new URLSearchParams();
+    if (params.limit != null) q.set('limit', String(params.limit));
+    if (params.stage != null) q.set('stage', params.stage);
+    const query = q.toString();
+    return api.get<SystemAiStatsResponse>(`/system/ai-stats${query ? `?${query}` : ''}`, options);
+  },
+
+  // -------- 社区（B 阶段 MVP） --------
+  /**
+   * GET /community/feed
+   * 匿名可读；登录态后端会按 user_id 填 liked_by_me。
+   */
+  communityFeed(
+    params: { sort?: CommunityFeedSort } = {},
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<CommunityFeedListResponse> {
+    const q = new URLSearchParams();
+    if (params.sort) q.set('sort', params.sort);
+    const query = q.toString();
+    return api.get<CommunityFeedListResponse>(`/community/feed${query ? `?${query}` : ''}`, options);
+  },
+
+  /** GET /community/trending — 今日推荐 Top 榜（匿名可读）。 */
+  communityTrending(
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<CommunityTrendingResponse> {
+    return api.get<CommunityTrendingResponse>('/community/trending', options);
+  },
+
+  /**
+   * GET /community/theme — 本周主题 + 投票进度。
+   * 匿名可读；登录态返回 voted_key（已投选项 key / 未投 = null）。
+   */
+  communityTheme(
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<CommunityThemeResponse> {
+    return api.get<CommunityThemeResponse>('/community/theme', options);
+  },
+
+  /**
+   * POST /community/theme/vote — 主题投票（需要登录）。
+   * 幂等；同用户投过别的选项 → 后端 409 ALREADY_VOTED_OTHER。
+   */
+  communityThemeVote(
+    request: CommunityThemeVoteRequest,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<CommunityThemeVoteResponse> {
+    return api.post<CommunityThemeVoteResponse>('/community/theme/vote', request, options);
+  },
+
+  /**
+   * POST /community/feed/{id}/like — 点赞（需要登录）。
+   * 幂等；重复点 duplicated=true，点赞数不叠加。
+   */
+  communityFeedLike(
+    feedId: string,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<CommunityLikeResponse> {
+    return api.post<CommunityLikeResponse>(
+      `/community/feed/${encodeURIComponent(feedId)}/like`,
+      undefined,
+      options,
+    );
+  },
+
+  // -------- 反馈（P6-04） --------
+  /** GET /feedback/types — 获取反馈类型列表。 */
+  feedbackTypes(
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<FeedbackTypeOption[]> {
+    return api.get<FeedbackTypeOption[]>('/feedback/types', options);
+  },
+
+  /** POST /feedback/submit — 提交反馈（登录可选）。 */
+  feedbackSubmit(
+    request: FeedbackSubmitRequest,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<FeedbackSubmitResponse> {
+    return api.post<FeedbackSubmitResponse>('/feedback/submit', request, options);
+  },
+
+  /** POST /feedback/report — 举报内容（需要登录）。 */
+  feedbackReport(
+    request: ReportRequest,
+    options?: Omit<RequestOptions, 'method' | 'body'>,
+  ): Promise<ReportResponse> {
+    return api.post<ReportResponse>('/feedback/report', request, options);
   },
 };

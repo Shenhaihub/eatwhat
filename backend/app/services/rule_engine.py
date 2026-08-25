@@ -27,6 +27,7 @@ from app.schemas import (
     Avoidance,
     BudgetFitStatus,
     BudgetTier,
+    CuisineGroup,
     FoodDictionaryItem,
     GenerationMode,
     MealPeriod,
@@ -154,6 +155,25 @@ def _score_item(
         ):
             score += MISMATCH_PENALTY
             signals.append(_make_signal("budget_mismatch", user_budget.value))
+
+    # 5.5. P1 修复：菜系偏好（用户选择日韩/西餐/中餐等 → 不匹配食物菜系时强扣分）
+    # 注意：CuisineGroup 存在父子语义（比如 burger 是 western + fast_food），
+    # 所以只要用户选的任意菜系与食物 tag 有交集就算匹配；完全无交集才惩罚。
+    user_cuisines: set[CuisineGroup] = set(answers.cuisine_preferences)
+    if user_cuisines:
+        item_cuisines: set[CuisineGroup] = set(item.cuisine_groups)
+        overlap: set[CuisineGroup] = user_cuisines & item_cuisines
+        if overlap:
+            # 多重奖励：命中一个菜系 +5，每多命中一个再加 2（鼓励更精准的标签）
+            score += STRONG_MATCH_BONUS + max(0, len(overlap) - 1) * 2
+            for c in sorted(overlap, key=lambda e: e.value):
+                signals.append(_make_signal("cuisine", c.value))
+        else:
+            # P1 再强化：菜系错配 = 4x 惩罚（原来是 2x），确保用户明确说"要日料"时
+            # 汉堡/炸鸡/烧烤这类完全不沾边的绝对不会排进前 3
+            score += 4 * MISMATCH_PENALTY
+            joined = ",".join(sorted(c.value for c in user_cuisines))
+            signals.append(_make_signal("cuisine_mismatch", joined))
 
     # 6. 明确食物偏好（问卷题二：已经明确想吃麻辣烫/牛肉面——对应 G-10）
     if answers.explicit_food_preference is not None:
@@ -314,6 +334,8 @@ def _signal_to_cn(s: str) -> str:
         "explicit_food": f"匹配你明确偏好的 {_food_display(val)}",
         "avoided": f"避开你不吃的 {_avoid_display(val)}",
         "taste": f"符合 {_taste_display(val)} 口味",
+        "cuisine": f"属于你选的 {_cuisine_display(val)} 菜系",
+        "cuisine_mismatch": f"不属于你选的菜系（{val}），可能不太合胃口",
         "budget_mismatch": "预算档位可能不太匹配",
         "budget": "预算档位大致匹配",
         "meal_period": f"适合 {_period_display(val)} 时段",
@@ -362,6 +384,24 @@ def _period_display(val: str) -> str:
         "afternoon_tea": "下午茶",
         "dinner": "晚餐",
         "midnight_snack": "宵夜",
+    }.get(val, val)
+
+
+def _cuisine_display(val: str) -> str:
+    return {
+        "chinese_staple": "中餐家常",
+        "noodle": "面食/粉面",
+        "hotpot": "火锅/麻辣烫/砂锅",
+        "grill": "烧烤/串",
+        "fast_food": "快餐",
+        "salad": "轻食沙拉",
+        "asian": "亚洲风味",
+        "snack": "零食/小吃",
+        "bakery": "面包/烘焙",
+        "beverage": "饮品",
+        "japanese": "日式/日料",
+        "korean": "韩式/韩餐",
+        "western": "西餐",
     }.get(val, val)
 
 

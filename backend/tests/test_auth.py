@@ -221,7 +221,7 @@ class TestMagicLink:
         # 确认 sign_in_with_otp 被调用且 should_create_user=True
         assert captured.get("options", {}).get("should_create_user") is True
         assert captured.get("email") == "alice@example.com"
-        assert captured.get("options", {}).get("email_redirect_to") == "http://127.0.0.1:5173/auth/callback"
+        assert captured.get("options", {}).get("email_redirect_to") == "http://localhost:5173/auth/callback"
 
     def test_auth_api_error_returns_sent_true_anti_enumeration(
         self, monkeypatch
@@ -266,10 +266,14 @@ class TestMagicLink:
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["sent"] is True
+        # P7 之后：为了让用户明确知道"收不到邮件是因为限流/配置问题"，不再对所有 AuthApiError 伪装 sent=True（防枚举）
+        # - 对 email_rate_limit_exceeded / invalid_redirect 这类"明确告诉用户"更有价值的错误：sent=false + 明确 error_code
+        # - 防枚举仍然对 user_not_found / invalid_credentials 等 _ENUM_CODES 生效
+        assert body["sent"] is False
         assert body["email"] == "bob@example.com"
-        # 错误码对前端透明（防枚举）
-        assert body.get("error_code") is None
+        # 错误码对前端透明（防枚举的同时仍暴露给用户是限流问题）
+        assert body.get("error_code") == "AUTH_RATE_LIMIT"
+        assert body.get("error_message") and "rate_limit" in body["error_message"].lower()
 
     def test_network_error_returns_sent_false_triggers_frontend_fallback(
         self, monkeypatch

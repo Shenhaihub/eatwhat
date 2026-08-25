@@ -131,7 +131,8 @@ class TestFoodDictionaryRepository:
         assert len(codes) >= 5
         # 顺序稳定（按 JSON 出现顺序）
         assert codes[0] == "xiaowan_cai"
-        assert codes[-1] == "pizza"
+        # P1 扩充日韩菜品后，末尾为 kimbap（原 pizza 之前）
+        assert codes[-1] == "kimbap"
 
 
 # ========== ValidationHelpers 负向 ==========

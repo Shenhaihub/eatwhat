@@ -36,7 +36,7 @@ log = logging.getLogger("app.services.ai.mock")
 
 MockMode = Literal["normal", "slow", "invalid_json", "out_of_bounds_food_code"]
 
-SLOW_MODE_DELAY_SECONDS = 9  # 超过 ChatService 默认 8000ms → 判超时
+SLOW_MODE_DELAY_SECONDS = 16  # "慢"语义：明显慢于正常响应；是否触发超时取决于调用方传入的 timeout_ms
 
 # 追问模板：3 轮预置题（Mock 不用真的理解，保证结构合法即可；真实 DeepSeek 才会动态生成）
 FOLLOW_UP_TEMPLATES: list[FollowUpQuestionOutput] = [

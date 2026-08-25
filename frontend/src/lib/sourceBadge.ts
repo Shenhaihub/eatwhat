@@ -13,11 +13,13 @@
  *     "rule_engine_fallback_ai_build_fail"     /
  *     "rule_engine_fallback_ai_fail"（旧默认）
  *       → 黄色 chip "规则引擎（AI 回退）"，并在 accessibleLabel 细化说明具体回退原因
- *   - "rule_engine_fallback_empty_ai" / "legacy_rule_engine" / null / 其他
- *       → 灰色 chip "规则引擎"（P2 旧路径或未写元信息）
+ *   - "legacy_rule_engine" / "rule_engine_direct"（P1 V1 纯规则模式，正常路径）
+ *   - "rule_engine_fallback_empty_ai" / null / 其他
+ *       → 蓝色 chip "确定性规则引擎"（中性语义，不暗示 AI 链路出问题）
  */
 
-export type SourceBadgeVariant = 'ai' | 'fallback' | 'legacy';
+// 新增 'rule' variant：V1 默认纯规则引擎（蓝色 neutral，中性）
+export type SourceBadgeVariant = 'ai' | 'fallback' | 'legacy' | 'rule';
 
 export interface FinalReasonMeta {
   readonly variant: SourceBadgeVariant;
@@ -31,13 +33,20 @@ export interface FinalReasonMeta {
 // ---- 对齐后端写入常量（见 app/services/recommendation_session.py） ----
 const AI_GAIN = 'ai_gain' as const;
 
+// 规则引擎（纯规则/中性/正常路径）—— V1 默认
+const RULE_LABEL = '确定性规则引擎';
+const RULE_ACCESSIBLE =
+  '本推荐来源于确定性规则引擎（未经过 AI 生成链路）；越靠前的越匹配你刚刚回答的偏好';
+const RULE_SUMMARY =
+  '以下推荐来源于确定性规则引擎；越靠前的越匹配你刚刚回答的偏好。';
+
 /** P5-09 细分回退原因 → 更友好的中文标签（用于 chip 内显示，不影响 variant 配色） */
 const FALLBACK_LABELS: Readonly<Record<string, string>> = {
   rule_engine_fallback_ai_local_quota: '规则引擎 · AI 日额度已用',
   rule_engine_fallback_ai_remote_quota: '规则引擎 · AI 平台限流',
   rule_engine_fallback_ai_unauthorized: '规则引擎 · AI 鉴权失败',
   rule_engine_fallback_ai_timeout: '规则引擎 · AI 响应超时',
-  rule_engine_fallback_ai_schema: '规则引擎 · AI 结果不可用',
+  rule_engine_fallback_ai_schema: '规则引擎 · AI 结果不可信',
   rule_engine_fallback_ai_build_fail: '规则引擎 · AI 未配置',
   rule_engine_fallback_ai_fail: '规则引擎 · AI 回退',
 };
@@ -79,6 +88,12 @@ const FALLBACK_SUMMARY: Readonly<Record<string, string>> = {
 };
 
 const FALLBACK_KEYS = new Set<string>(Object.keys(FALLBACK_LABELS));
+// V1 纯规则模式正常写入值 → 中性蓝 badge（不是"AI 回退"、不是"旧路径"）
+const RULE_KEYS = new Set<string>([
+  'legacy_rule_engine',
+  'rule_engine_direct',
+  'rule_engine_fallback_empty_ai',
+]);
 
 export function describeFinalReason(
   finalReason: string | null | undefined,
@@ -89,6 +104,16 @@ export function describeFinalReason(
       label: 'AI 生成',
       accessibleLabel: '本推荐由大模型生成并经确定性规则二次排序；越靠前越匹配你当下的偏好',
       summaryText: '以下推荐由 AI 生成并经确定性规则二次排序；越靠前越匹配你当下的偏好。',
+    };
+  }
+
+  // V1 正常的纯规则模式（不是 AI 回退、不是系统出错）
+  if (typeof finalReason === 'string' && RULE_KEYS.has(finalReason)) {
+    return {
+      variant: 'rule',
+      label: RULE_LABEL,
+      accessibleLabel: RULE_ACCESSIBLE,
+      summaryText: RULE_SUMMARY,
     };
   }
 
@@ -105,11 +130,11 @@ export function describeFinalReason(
     };
   }
 
-  // legacy / empty_ai / 未知 key → 灰色规则引擎
+  // null / undefined / 未知 key → 兜底用"确定性规则引擎"（中性）
   return {
-    variant: 'legacy',
-    label: '规则引擎',
-    accessibleLabel: '本推荐由确定性规则引擎生成（未经过 AI 生成链路）',
-    summaryText: '以下推荐来源于确定性规则引擎；越靠前的越匹配你刚刚回答的偏好。',
+    variant: 'rule',
+    label: RULE_LABEL,
+    accessibleLabel: RULE_ACCESSIBLE,
+    summaryText: RULE_SUMMARY,
   };
 }

@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 
 import * as apiClient from '../services/api/client';
 import type {
@@ -9,8 +10,18 @@ import type {
   RecommendationsGenerateRequestV1,
   RecommendationsGenerateResponseV1,
   RecommendationItem,
+  SessionStateResponseV1,
 } from '../services/api/types';
+import { AuthProvider } from '../context/AuthContext';
 import Recommend from '../pages/Recommend';
+
+function renderInContext(ui: React.ReactElement) {
+  return render(
+    <MemoryRouter initialEntries={['/recommend']}>
+      <AuthProvider>{ui}</AuthProvider>
+    </MemoryRouter>,
+  );
+}
 
 const BASE_RESULT: QuestionnaireRecomputeResult = {
   questionnaire_version: 'v1.0',
@@ -71,17 +82,32 @@ function makeRec(food_code: string, priority: 1 | 2 | 3 | 4 | 5): Recommendation
   };
 }
 
-const TOP5_RESPONSE: RecommendationsGenerateResponseV1 = [
+const TOP5_ITEMS: readonly RecommendationItem[] = [
   makeRec('malatang', 1),
   makeRec('zhou_cai', 2),
   makeRec('rice_noodle', 3),
   makeRec('braised_pork_rice', 4),
   makeRec('small_bowl_dishes', 5),
 ];
+const TOP5_RESPONSE: RecommendationsGenerateResponseV1 = {
+  items: TOP5_ITEMS,
+  merged_pref_fields: [],
+};
+
+function _items(r: RecommendationsGenerateResponseV1): readonly RecommendationItem[] {
+  return Array.isArray(r) ? r : r.items;
+}
 
 describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsGenerate）', () => {
   beforeEach(() => {
     if (typeof window !== 'undefined') window.localStorage.clear();
+
+    // P5 动态会话是"新推荐链路"，测试意图在验证 P2-04 的老流程 fallback：
+    // 让 recommendationsSessionStart 抛非 AbortError，代码会自动 fallback 到 legacy recommendationsGenerate，
+    // 这样就能复用原先 recSpy 的断言（测试请求体映射 + 结果渲染 + 1-3-5 渐进展开）。
+    vi.spyOn(apiClient.api, 'recommendationsSessionStart').mockRejectedValue(
+      new Error('[RecGen test] 模拟 session API 未实现，fallback 到 legacy recommendationsGenerate'),
+    );
   });
 
   afterEach(() => {
@@ -109,7 +135,7 @@ describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsG
       .spyOn(apiClient.api, 'recommendationsGenerate')
       .mockResolvedValue(TOP5_RESPONSE);
 
-    render(<Recommend />);
+    renderInContext(<Recommend />);
     // 等 progress=100 落库
     await waitFor(() =>
       expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
@@ -141,7 +167,7 @@ describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsG
       return TOP5_RESPONSE;
     });
 
-    render(<Recommend />);
+    renderInContext(<Recommend />);
     await waitFor(() =>
       expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
     );
@@ -182,7 +208,7 @@ describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsG
     vi.spyOn(apiClient.api, 'questionnaireNext').mockResolvedValue(COMPLETE_RESULT);
     vi.spyOn(apiClient.api, 'recommendationsGenerate').mockResolvedValue(TOP5_RESPONSE);
 
-    render(<Recommend />);
+    renderInContext(<Recommend />);
     await waitFor(() =>
       expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
     );
@@ -200,7 +226,7 @@ describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsG
       const card = list.querySelector(`[data-priority="${p}"]`);
       expect(card).toBeTruthy();
       const nameEl = screen.getByTestId(`rec-name-${p}`);
-      expect(nameEl).toHaveTextContent(TOP5_RESPONSE[p - 1]!.food_code);
+      expect(nameEl).toHaveTextContent(_items(TOP5_RESPONSE)[p - 1]!.food_code);
     }
     // MEM-024 验证：链路 B 首菜不是小碗菜（是 malatang）
     expect(screen.getByTestId('rec-name-1')).toHaveTextContent('malatang');
@@ -219,7 +245,7 @@ describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsG
     vi.spyOn(apiClient.api, 'questionnaireNext').mockResolvedValue(COMPLETE_RESULT);
     vi.spyOn(apiClient.api, 'recommendationsGenerate').mockResolvedValue(TOP5_RESPONSE);
 
-    render(<Recommend />);
+    renderInContext(<Recommend />);
     await waitFor(() =>
       expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
     );
@@ -246,5 +272,143 @@ describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsG
     await user.click(screen.getByTestId('expand-recommendations'));
     expect(countVisible()).toBe(5);
     expect(screen.queryByTestId('expand-recommendations')).toBeNull();
+  });
+});
+
+// ---------- P5-02 新链路：follow_up 自动跳过 seed 预填维度 ----------
+describe('/recommend P5 session follow_up 自动跳过 seed 预填（菜系/明确想吃重复题不再显示）', () => {
+  // answers 基础集 + q07 预填=japanese（对应社区"就按日料给我生成推荐"跳过来）
+  const ANSWERS_WITH_JAPANESE: Record<string, string[]> = {
+    q01_meal_period: ['lunch'],
+    q02_explicit_food: ['sushi'],
+    q03_budget: ['from_20_to_30'],
+    q04_tastes: ['light'],
+    q06_appetite: ['normal'],
+    q07_cuisine_preference: ['japanese'],
+  };
+  const ANSWERS_NO_CUISINE: Record<string, string[]> = {
+    q01_meal_period: ['lunch'],
+    q02_explicit_food: [],
+    q03_budget: ['from_20_to_30'],
+    q04_tastes: ['light'],
+    q06_appetite: ['normal'],
+  };
+
+  // —— 与真实后端 FOLLOW_UP_TEMPLATES 保持一致的选项结构 ——
+  // 后端把 japanese+korean 合并成 japanese_korean / 日韩，验证模糊匹配链能兜住
+  const CUISINE_FOLLOW_UP_QUESTION = {
+    question_id: 'ai_fu_001_cuisine',
+    title_zh: '今天想吃哪种菜系风格？',
+    purpose_zh: '补充菜系偏好维度，避免推荐不随地域偏好变化',
+    should_continue: true,
+    options: [
+      { value: 'chinese_north', label_zh: '北方家常（面/粥/饼/炖菜）' },
+      { value: 'chinese_south', label_zh: '南方家常（米饭/小炒/汤）' },
+      { value: 'western', label_zh: '西式（汉堡/三明治/披萨/沙拉）' },
+      { value: 'japanese_korean', label_zh: '日韩（寿司/冷面/炸鸡）' },
+      { value: 'spicy', label_zh: '只要辣（川菜/麻辣烫/烧烤）' },
+    ],
+  };
+
+  function sessionFollowUp(question = CUISINE_FOLLOW_UP_QUESTION): SessionStateResponseV1 {
+    return {
+      session_id: 'sess_auto_skip_001',
+      stage: 'follow_up',
+      question,
+      rounds_completed: 0,
+      max_rounds: 3,
+      candidates: null,
+      final_reason: null,
+      merged_pref_fields: [],
+    };
+  }
+  function sessionFinal(): SessionStateResponseV1 {
+    return {
+      session_id: 'sess_auto_skip_001',
+      stage: 'final',
+      question: null,
+      rounds_completed: 1,
+      max_rounds: 3,
+      candidates: TOP5_ITEMS,
+      final_reason: 'rule_engine_fallback_ai_fail',
+      merged_pref_fields: [],
+    };
+  }
+
+  beforeEach(() => {
+    if (typeof window !== 'undefined') window.localStorage.clear();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (typeof window !== 'undefined') window.localStorage.clear();
+  });
+
+  it('5) 正向：answers.q07=japanese 时 session 返回菜系 follow_up → 前端自动回答并推进到 final，用户看不到重复题', async () => {
+    const user = userEvent.setup();
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        'eatwhat:questionnaire:draft:v1.0:ai_recommend',
+        JSON.stringify(ANSWERS_WITH_JAPANESE),
+      );
+    }
+
+    vi.spyOn(apiClient.api, 'questionnaireNext').mockResolvedValue(COMPLETE_RESULT);
+    const startSpy = vi
+      .spyOn(apiClient.api, 'recommendationsSessionStart')
+      .mockResolvedValue(sessionFollowUp());
+    const answerSpy = vi
+      .spyOn(apiClient.api, 'recommendationsSessionAnswer')
+      .mockResolvedValue(sessionFinal());
+
+    renderInContext(<Recommend />);
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
+    );
+
+    await user.click(screen.getByTestId('goto-recommendations'));
+
+    // 断言 1：sessionStart 被调用 1 次
+    await waitFor(() => expect(startSpy).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    // 断言 2：recommendationsSessionAnswer 被调用 1 次，且选项值 === 'japanese_korean'（模糊匹配命中 japanese_korean）
+    expect(answerSpy).toHaveBeenCalledTimes(1);
+    const callArg = vi.mocked(apiClient.api.recommendationsSessionAnswer).mock.calls[0]?.[1];
+    expect(callArg?.selected_option_value).toBe('japanese_korean');
+    expect(callArg?.question_id).toBe(CUISINE_FOLLOW_UP_QUESTION.question_id);
+
+    // 断言 3：最终渲染 5 张结果卡；follow_up 标题「今天想吃哪种菜系风格？」没有在 DOM 上出现过（用户看不到重复题）
+    await waitFor(() => screen.getByTestId('recommendations-list'), { timeout: 3000 });
+    expect(screen.queryByText(/今天想吃哪种菜系风格/)).toBeNull();
+    expect(screen.getByTestId('recommendations-list').querySelectorAll('.recommendation-card')).toHaveLength(5);
+    expect(screen.getByTestId('rec-name-1')).toHaveTextContent('malatang');
+  });
+
+  it('6) 反向：answers 未填菜系时 session 返回菜系 follow_up → 不自动跳，显示给用户自己选（防误跳保护）', async () => {
+    const user = userEvent.setup();
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        'eatwhat:questionnaire:draft:v1.0:ai_recommend',
+        JSON.stringify(ANSWERS_NO_CUISINE),
+      );
+    }
+
+    vi.spyOn(apiClient.api, 'questionnaireNext').mockResolvedValue(COMPLETE_RESULT);
+    vi.spyOn(apiClient.api, 'recommendationsSessionStart').mockResolvedValue(sessionFollowUp());
+    const answerSpy = vi
+      .spyOn(apiClient.api, 'recommendationsSessionAnswer')
+      .mockResolvedValue(sessionFinal());
+
+    renderInContext(<Recommend />);
+    await waitFor(() =>
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
+    );
+
+    await user.click(screen.getByTestId('goto-recommendations'));
+
+    // 自动回答不应触发（因为 q07 为空），answerSpy 被调用 0 次
+    await waitFor(() =>
+      expect(screen.getByText(/今天想吃哪种菜系风格/)).toBeTruthy(),
+      { timeout: 3000 },
+    );
+    expect(answerSpy).toHaveBeenCalledTimes(0);
   });
 });

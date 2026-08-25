@@ -54,21 +54,41 @@ class RecommendationSession:
     questionnaire_answers_by_qid: dict[str, list[str]]
     questionnaire_version: str
     dictionary_version: str
-
     # 规则引擎的输入（已翻译过的七维），供最终生成回退 & system prompt 组装用
     rule_answers: Any  # QuestionnaireAnswers（不引循环 import，保持 duck-type）
 
     # P5-07：绑定的登录用户 id。仅用于 AI 额度日限流（按 user 维度计数），不做 RLS。
     # 未登录匿名用户走推荐（未来 P3 扩展）时此字段为 None，此时只走全局维度限流。
     user_id: str | None = None
+    # V1 固定 = "rule"（纯规则引擎，不走 AI 链路）；P5 接入后可能是 "ai"。
+    # 用于 finalize 时决定：rule → 直接写 legacy_rule_engine；ai → 走 AI 增益。
+    generation_mode: str = "rule"
 
     # AI 增益侧
     round_index_1based_next: int = 1  # 下一问是第几轮（1..3）
     follow_up_history: list[FollowUpAnswer] = field(default_factory=list)
+    # P1 修复：持久化"实际展示给前端的题"，用于幂等校验。
+    # - 之前 _question_for_round 用固定 FOLLOW_UP_TEMPLATES 当校验对照，
+    #   但当 AI 生成动态题（ai_fu_001_ambiance 等）或 _pick_fallback_template
+    #   跳过已覆盖维度时，实际展示的题和固定模板对不上，前端一提交就抛
+    #   InvalidOptionValueError ("round mismatch")。
+    # - 现在：start 返回给前端什么题，就存什么题；answer_and_advance
+    #   判下一题是什么，也用同一份持久化列表取，保证 100% 一致。
+    follow_up_questions: list[FollowUpQuestionOutput] = field(default_factory=list)
 
     # 最终结果（stage=final 后写入）
     final_items: list[RecommendationItem] | None = None
     final_reason: str | None = None  # "ai_gain" | "rule_engine_fallback_*"
+
+    # P6-04：最近历史偏好画像摘要（自然语言），拼进 system prompt 喂给 DeepSeek
+    # 失败/无历史时为空串 ""，调用者通过 with_preference_context() 注入
+    preference_context: str = ""
+    # P7-05：实际合并进入 preference_context 的快照条数（0 表示未合并/未命中/失败）
+    preference_context_snapshot_count: int = 0
+
+    # P7-07：P6-02 冷启动画像合并实际改变的 answers 字段（传给前端 banner 展示）
+    # 每个元素形如 { "field": key, "kind": "single" | "list" | "ai_follow_up", "before": ..., "after": ... }
+    merged_pref_fields: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def stage(self) -> str:
@@ -109,6 +129,7 @@ class RecommendationSessionManager:
         questionnaire_answers_by_qid: dict[str, list[str]],
         questionnaire_version: str,
         dictionary_version: str,
+        generation_mode: str = "rule",
         rule_answers: Any,
     ) -> RecommendationSession:
         now = time.monotonic()
@@ -121,6 +142,7 @@ class RecommendationSessionManager:
             questionnaire_answers_by_qid=dict(questionnaire_answers_by_qid),
             questionnaire_version=questionnaire_version,
             dictionary_version=dictionary_version,
+            generation_mode=generation_mode,
             rule_answers=rule_answers,
         )
         with self._lock:
@@ -148,16 +170,36 @@ class RecommendationSessionManager:
     ) -> FollowUpQuestionOutput | None:
         """返回下一题；若 AI 判断信息充分或失败则返回 None（直接进 final）。"""
         prompt_sys, prompt_user = self._build_follow_up_prompts(session)
-        # 默认第 1 题来自 FOLLOW_UP_TEMPLATES，AI 成功则覆盖为 AI 动态题
-        default = FOLLOW_UP_TEMPLATES[0]
+        # 选择合适的默认模板（跳过已被问卷覆盖的维度）
+        default = self._pick_fallback_template(session, round_index_1based=1)
+        if default is None:
+            # 问卷已覆盖所有可追问维度，直接跳过追问
+            return None
         ai_q = await self._chat_service.generate_follow_up(
             system_prompt=prompt_sys,
             user_prompt=prompt_user,
             round_index_1based=1,
             user_id=session.user_id,
         )
-        # AI 失败/越界/超时 → 静默用默认第 1 题（fail-open）
-        return ai_q or default
+        outcome = "used" if ai_q is not None else "fallback_default_template"
+        self._log_ai_call_meta(
+            ai_stage="follow_up",
+            session=session,
+            round_index_1based=1,
+            prompt_sys=prompt_sys,
+            prompt_user=prompt_user,
+            ai_outcome=outcome,
+        )
+        # AI 失败/越界/超时 → 静默用跳过已覆盖维度的默认题（fail-open）
+        # 过滤规则：AI 返回到的题若是"重复维度/已答过"，丢弃改用默认题，避免用户被重复问。
+        if ai_q is not None and self._question_is_redundant(session, ai_q):
+            outcome = "fallback_default_template"  # 重新打点：实际用了回退题
+            ai_q = None
+        q = ai_q or default
+        # P1 修复：把实际要展示给前端的题，持久化进 session 用于后续幂等校验
+        if q is not None:
+            session.follow_up_questions.append(q)
+        return q
 
     # ============== 状态机：提交回答 → 下一题或 final ==============
     async def answer_and_advance(
@@ -173,13 +215,14 @@ class RecommendationSessionManager:
             # 1) 幂等：同一题不能重答
             if any(a.question_id == question_id for a in session.follow_up_history):
                 raise QuestionAlreadyAnsweredError(question_id)
-            # 2) 校验：当前必须正好 round_index_1based_next，且 option value 在题里
-            prev = await self._question_for_round(
-                session, session.round_index_1based_next, repo=repo
-            )
-            if prev is None:
+            # 2) 校验：与持久化列表中"当前该轮到的题"完全一致
+            #    follow_up_questions 存的就是 start/advance 实际返回给前端的题，
+            #    与展示端 1:1 对齐，不再用 FOLLOW_UP_TEMPLATES 做对照。
+            idx = session.round_index_1based_next - 1
+            if idx < 0 or idx >= len(session.follow_up_questions):
                 # 之前就被判信息充分直接 final 了；重复调用抛已答过
                 raise QuestionAlreadyAnsweredError(question_id)
+            prev = session.follow_up_questions[idx]
             if prev.question_id != question_id:
                 raise InvalidOptionValueError(
                     f"round mismatch：期望 {prev.question_id!r}，收到 {question_id!r}"
@@ -204,20 +247,36 @@ class RecommendationSessionManager:
         # 4) 如果上一题的 should_continue=False 或 next_round > 3 → 直接 final
         if (not prev.should_continue) or next_round > 3:
             return None
-        # 5) 否则生成下一道 AI 追问（失败回退默认题）
+        # 5) 否则生成下一道 AI 追问（失败回退默认题，跳过已覆盖维度）
         prompt_sys, prompt_user = self._build_follow_up_prompts(session)
-        default_next = (
-            FOLLOW_UP_TEMPLATES[next_round - 1]
-            if 1 <= next_round <= len(FOLLOW_UP_TEMPLATES)
-            else None
-        )
+        default_next = self._pick_fallback_template(session, round_index_1based=next_round)
         ai_q = await self._chat_service.generate_follow_up(
             system_prompt=prompt_sys,
             user_prompt=prompt_user,
             round_index_1based=next_round,
             user_id=session.user_id,
         )
-        return ai_q or default_next
+        outcome = "used" if ai_q is not None else (
+            "fallback_default_template" if default_next is not None else "fallback_to_final"
+        )
+        # 过滤规则：AI 返回的题若是"重复维度/已答过"，丢弃改用默认题，避免 mock 轮次错位把同一题再抛给前端。
+        if ai_q is not None and self._question_is_redundant(session, ai_q):
+            outcome = "fallback_default_template" if default_next is not None else "fallback_to_final"
+            ai_q = None
+        self._log_ai_call_meta(
+            ai_stage="follow_up",
+            session=session,
+            round_index_1based=next_round,
+            prompt_sys=prompt_sys,
+            prompt_user=prompt_user,
+            ai_outcome=outcome,
+        )
+        next_q = ai_q or default_next
+        # P1 修复：把下一题也持久化进 session，等前端来提交这题时用同一份对照校验
+        if next_q is not None:
+            with self._lock:
+                session.follow_up_questions.append(next_q)
+        return next_q
 
     # ============== 最终推荐生成：AI（增益）+ 规则引擎（兜底真源）==============
     def finalize_recommendation(
@@ -225,16 +284,19 @@ class RecommendationSessionManager:
         *,
         session: RecommendationSession,
         repo: FoodDictionaryRepository,
+        reason: str = "legacy_rule_engine",
     ) -> list[RecommendationItem]:
-        """同步封装：先 try_ai_finalize（异步的话外面 await 再走 fallback）。
+        """同步封装：纯规则引擎直接生成 5 条推荐（V1 generation_mode='rule' 默认路径）。
 
-        这里只做规则引擎兜底 + 写 session；AI 部分由 `try_ai_finalize_recommendation` 完成。
+        参数 reason：决定写入 session.final_reason 的值，前端据此显示 badge 颜色/文案：
+          - "legacy_rule_engine"  : V1 正常的纯规则路径（不是 AI 回退）→ 中性灰/蓝 badge
+          - "rule_engine_fallback_empty_ai"  : 旧 AI 路径里"没产生任何输出"的回退
         """
         if session.final_items is not None:
             return list(session.final_items)
         items = generate_rule_recommendations(session.rule_answers, repo=repo)
         session.final_items = list(items)
-        session.final_reason = "rule_engine_fallback_empty_ai"
+        session.final_reason = reason
         return list(items)
 
     async def try_ai_finalize_recommendation(
@@ -248,9 +310,20 @@ class RecommendationSessionManager:
 
         P5-09：AI 失败时按细分 fail_code 写入 session.final_reason，便于前端
         source badge 显示更具体的原因（Unauthorized / Quota / Timeout / ...）。
+
+        V1：session.generation_mode = 'rule' → 直接走纯规则引擎，不调用 AI 链路，
+        避免前端显示"AI 结果不可用"这种容易让用户以为"系统坏了"的负面 badge。
         """
         if session.final_items is not None:
             return list(session.final_items)
+
+        # V1 纯规则模式：跳过 AI 调用链，直接出规则结果
+        if session.generation_mode == "rule":
+            return self.finalize_recommendation(
+                session=session,
+                repo=repo,
+                reason="legacy_rule_engine",
+            )
 
         prompt_sys, prompt_user = self._build_final_prompts(session)
         ai_out: FinalRecommendationOutput | None = (
@@ -263,6 +336,7 @@ class RecommendationSessionManager:
         # P5-09：AI 细分失败码（成功 = None，失败 = build/local_quota/remote_quota/
         # unauthorized/timeout/schema/unknown）
         fail_code = self._chat_service.take_last_fail_code()
+        final_reason_before: str | None = None
 
         if ai_out is not None:
             try:
@@ -270,6 +344,17 @@ class RecommendationSessionManager:
                 if len(items) == 5:
                     session.final_items = items
                     session.final_reason = "ai_gain"
+                    final_reason_before = "ai_gain"
+                    self._log_ai_call_meta(
+                        ai_stage="final",
+                        session=session,
+                        round_index_1based=None,
+                        prompt_sys=prompt_sys,
+                        prompt_user=prompt_user,
+                        ai_outcome="used",
+                        ai_fail_code=fail_code,
+                        final_reason=session.final_reason,
+                    )
                     return list(items)
             except Exception as exc:  # noqa: BLE001
                 log.warning(
@@ -282,6 +367,16 @@ class RecommendationSessionManager:
         items = generate_rule_recommendations(session.rule_answers, repo=repo)
         session.final_items = list(items)
         session.final_reason = _map_ai_fail_code_to_final_reason(fail_code)
+        self._log_ai_call_meta(
+            ai_stage="final",
+            session=session,
+            round_index_1based=None,
+            prompt_sys=prompt_sys,
+            prompt_user=prompt_user,
+            ai_outcome="fallback_rule_engine",
+            ai_fail_code=fail_code,
+            final_reason=session.final_reason,
+        )
         return list(items)
 
     # ============== 内部：Prompt 翻译（七维 + 已答追问题 → 自然语言摘要）==============
@@ -290,12 +385,27 @@ class RecommendationSessionManager:
     ) -> tuple[str, str]:
         base = _describe_rule_answers_brief(session.rule_answers)
         history_desc = _describe_follow_up_history(session.follow_up_history)
+        pref_blk = session.preference_context.strip()
+        # 判断菜系是否已在问卷中收集，避免 AI 追问重复问菜系
+        cuisine_already_covered = self._cuisine_dimension_covered(session)
         system = (
             "你是 EatWhat 的个性化追问助手。\n"
-            "目标：用最多 3 轮单选追问，把用户偏好补全得更精准（菜系/口味/氛围三维为主）。\n"
-            "输出必须严格符合 FollowUpQuestionOutput JSON schema，不要加任何 Markdown 或注释。\n"
+            "目标：用最多 3 轮单选追问，把用户偏好补全得更精准（口味/氛围/营养三维为主）。\n"
+            "重要：基础问卷已覆盖用餐时段、饱腹程度、忌口、口味偏好、预算、明确想吃等维度，"
+            "不要在追问中重复询问这些维度。\n"
+            + (
+                "用户的菜系偏好已在问卷中收集，不要再追问菜系相关问题。\n"
+                if cuisine_already_covered
+                else "菜系维度问卷未覆盖，可在追问中补充菜系偏好。\n"
+            )
+            + "输出必须严格符合 FollowUpQuestionOutput JSON schema，不要加任何 Markdown 或注释。\n"
             "安全边界：question_id 格式必须为 ai_fu_00X_slug（X ∈ {1,2,3}），"
             "options 至少 2 条最多 6 条，value 唯一，title_zh/purpose_zh 中文。"
+            + (
+                ("\n\n[用户历史画像参考]：以下为此用户最近几次推荐生成的偏好快照，可作为你出题与判断时的长期先验；"
+                 "若与本次问卷冲突，以本次问卷为准。\n" + pref_blk)
+                if pref_blk else ""
+            )
         )
         user = (
             f"[基础问卷七维摘要]：{base}\n"
@@ -308,14 +418,31 @@ class RecommendationSessionManager:
     def _build_final_prompts(self, session: RecommendationSession) -> tuple[str, str]:
         base = _describe_rule_answers_brief(session.rule_answers)
         history_desc = _describe_follow_up_history(session.follow_up_history)
+        pref_blk = session.preference_context.strip()
+
+        # 构建食物字典中的有效 food_code 列表，供 AI 选择
+        from app.repositories.food_dictionary import get_food_dictionary_repository
+        repo = get_food_dictionary_repository()
+        enabled_items = repo.list_enabled()
+        code_list = "\n".join(
+            f"    - {it.food_code} ({it.display_name_zh})"
+            for it in enabled_items
+        )
+
         system = (
             "你是 EatWhat 的最终推荐生成助手。\n"
             "输出必须严格符合 FinalRecommendationOutput JSON schema。\n"
             "强约束 1：candidates 长度必须正好 5。\n"
-            "强约束 2：每个 food_code 必须来自服务端启用的食物字典（若你不确定请只选常见菜系）。\n"
+            "强约束 2：food_code 只能从以下启用字典中选择，禁止使用列表外的编码：\n"
+            f"{code_list}\n"
             "强约束 3：5 个 food_code 必须互不相同。\n"
             "强约束 4：reason_zh 必须是中文，每句 4-200 字，说明推荐理由。\n"
             "输出 JSON 即可，禁止任何额外文字、Markdown、代码块。"
+            + (
+                ("\n\n[用户历史画像参考]：以下为此用户最近几次推荐生成的偏好快照，可作为你推荐的长期先验；"
+                 "若与本次问卷冲突，以本次问卷为准。\n" + pref_blk)
+                if pref_blk else ""
+            )
         )
         user = (
             f"[基础问卷七维摘要]：{base}\n"
@@ -323,6 +450,55 @@ class RecommendationSessionManager:
             "[任务]：基于以上信息给出最终 Top5 推荐，下标 0 = priority 1。"
         )
         return system, user
+
+    # ============== P7-05：AI 调用可观测埋点 ==============
+    def _log_ai_call_meta(
+        self,
+        *,
+        ai_stage: str,  # "follow_up" | "final"
+        session: RecommendationSession,
+        round_index_1based: int | None,
+        prompt_sys: str,
+        prompt_user: str,
+        ai_outcome: str,
+        ai_fail_code: str | None = None,
+        final_reason: str | None = None,
+    ) -> None:
+        pref_blk = session.preference_context.strip()
+        pref_used = bool(pref_blk)
+        pref_chars = len(pref_blk)
+        pref_nlines = pref_blk.count("\n") + 1 if pref_blk else 0
+        pref_count = session.preference_context_snapshot_count or 0
+        extra: dict[str, Any] = {
+            "ai_call_stage": ai_stage,
+            "session_id": session.session_id,
+            "user_id": session.user_id,
+            "ai_round_1based": round_index_1based,
+            "preference_context_used": pref_used,
+            "preference_context_snapshot_count": pref_count,
+            "preference_context_chars": pref_chars,
+            "preference_context_lines": pref_nlines,
+            "system_prompt_chars": len(prompt_sys),
+            "user_prompt_chars": len(prompt_user),
+            "total_prompt_chars": len(prompt_sys) + len(prompt_user),
+            "ai_outcome": ai_outcome,
+            "ai_fail_code": ai_fail_code,
+            "final_reason": final_reason,
+        }
+        log.info(
+            "ai_call stage=%s round=%s pref_used=%s pref_snaps=%d pref_chars=%d sys_chars=%d user_chars=%d outcome=%s fail_code=%s final_reason=%s",
+            ai_stage,
+            round_index_1based,
+            pref_used,
+            pref_count,
+            pref_chars,
+            len(prompt_sys),
+            len(prompt_user),
+            ai_outcome,
+            ai_fail_code,
+            final_reason,
+            extra=extra,
+        )
 
     async def _question_for_round(
         self,
@@ -343,6 +519,76 @@ class RecommendationSessionManager:
         if 0 <= idx < len(FOLLOW_UP_TEMPLATES):
             return FOLLOW_UP_TEMPLATES[idx]
         return None
+
+    def _cuisine_dimension_covered(self, session: RecommendationSession) -> bool:
+        """菜系维度是否已覆盖。
+
+        只要满足其一即视为"菜系已经不用再问"：
+        1. 问卷里已收集 cuisine_preferences（q07 选过菜系）；
+        2. 用户已指定明确想吃的具体食物（explicit_food_preference 非 undecided）——
+           如选了 malatang / beef_noodles，已经隐含菜系方向，再问菜系就是重复。
+        """
+        if bool(getattr(session.rule_answers, "cuisine_preferences", None)):
+            return True
+        exp = getattr(session.rule_answers, "explicit_food_preference", None)
+        if exp is not None:
+            val = exp.value if hasattr(exp, "value") else exp
+            if val not in ("undecided", "none", ""):
+                return True
+        return False
+
+    def _pick_fallback_template(
+        self, session: RecommendationSession, *, round_index_1based: int
+    ) -> FollowUpQuestionOutput | None:
+        """根据当前问卷已覆盖的维度 + 已答过的题，挑选合适的默认回退模板。
+
+        - 跳过已被问卷覆盖的维度题（q07 cuisine_preferences / q04 tastes 等），
+          避免 AI 失败时重复问用户已经回答过的问题；
+        - 跳过已答过的 question_id（幂等），避免 mock/轮次错位时把同一道题再抛给前端。
+        返回 None 表示"剩余模板全被覆盖/已答 → 直接 final"。
+        """
+        answered_qids = {a.question_id for a in session.follow_up_history}
+        cuisine_covered = self._cuisine_dimension_covered(session)
+        flavor_covered = bool(getattr(session.rule_answers, "tastes", None))
+
+        # 模板与"是否应跳过"的映射（question_id 前缀 → 维度/已答）
+        def _is_skippable(t: FollowUpQuestionOutput) -> bool:
+            if t.question_id in answered_qids:
+                return True
+            if t.question_id == "ai_fu_001_cuisine" and cuisine_covered:
+                return True
+            if t.question_id == "ai_fu_002_flavor" and flavor_covered:
+                return True
+            return False
+
+        start_idx = max(round_index_1based - 1, 0)
+        for idx in range(start_idx, len(FOLLOW_UP_TEMPLATES)):
+            t = FOLLOW_UP_TEMPLATES[idx]
+            if not _is_skippable(t):
+                return t
+        # 所有剩余模板都被覆盖/已答 → 直接跳过追问
+        return None
+
+    def _question_is_redundant(
+        self, session: RecommendationSession, q: FollowUpQuestionOutput | None
+    ) -> bool:
+        """判断一道 AI 生成的追问是否"重复"：要么该维度问卷已覆盖，要么已答过。
+
+        用于把 AI（尤其 mock 按固定模板轮询）返回的重复题过滤掉，
+        回退到 _pick_fallback_template 的下一道可用题。
+        """
+        if q is None:
+            return False
+        answered_qids = {a.question_id for a in session.follow_up_history}
+        if q.question_id in answered_qids:
+            return True
+        if q.question_id == "ai_fu_001_cuisine" and self._cuisine_dimension_covered(session):
+            return True
+        if q.question_id == "ai_fu_002_flavor" and bool(
+            getattr(session.rule_answers, "tastes", None)
+        ):
+            return True
+        return False
 
     # ============== GC：惰性清理过期会话 ==============
     def _maybe_gc_unlocked(self) -> None:
@@ -369,6 +615,7 @@ def _describe_rule_answers_brief(rule_answers: Any) -> str:
         ("appetite", "饱腹程度"),
         ("avoidances", "忌口"),
         ("tastes", "口味偏好"),
+        ("cuisine_preferences", "菜系偏好"),
         ("budget", "预算"),
         ("explicit_food_preference", "明确想吃"),
     ):

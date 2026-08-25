@@ -115,13 +115,22 @@ async def test_start_and_get_next_returns_first_question_template_or_ai() -> Non
 
 @pytest.mark.anyio
 async def test_answer_three_rounds_advances_correctly_then_final() -> None:
+    from app.schemas.enums import BudgetTier, MealPeriod
+
     mgr = RecommendationSessionManager(settings=_make_settings())
     repo = get_food_dictionary_repository()
+    # 用一个"七维几乎未覆盖"的 rule_answers（不含 tastes），保证三轮都能问，
+    # 否则已覆盖维度会被 _pick_fallback_template / _question_is_redundant 跳过，
+    # 导致三轮推进的意图失效。
+    rule = QuestionnaireAnswers(
+        meal_period=MealPeriod.LUNCH,
+        budget=BudgetTier.FROM_20_TO_30,
+    )
     s = mgr.create_session(
         questionnaire_answers_by_qid={},
         questionnaire_version="v1.0",
         dictionary_version="v1.0",
-        rule_answers=_make_rule_answers(),
+        rule_answers=rule,
     )
     t1 = FOLLOW_UP_TEMPLATES[0]
     await mgr.start_and_get_next(session=s)
@@ -241,6 +250,7 @@ async def test_try_ai_finalize_success_generation_mode_ai() -> None:
         questionnaire_answers_by_qid={},
         questionnaire_version="v1.0",
         dictionary_version="v1.0",
+        generation_mode="ai",  # 需要走 AI 增益链路（V1 默认 rule 会直接短路）
         rule_answers=_make_rule_answers(),
     )
     items = await mgr.try_ai_finalize_recommendation(session=s, repo=repo)
@@ -262,6 +272,7 @@ async def test_try_ai_finalize_fail_fallback_to_rule_engine() -> None:
         questionnaire_answers_by_qid={},
         questionnaire_version="v1.0",
         dictionary_version="v1.0",
+        generation_mode="ai",  # 需要走 AI 增益链路（V1 默认 rule 会直接短路）
         rule_answers=_make_rule_answers(),
     )
     items = await mgr.try_ai_finalize_recommendation(session=s, repo=repo)
@@ -317,7 +328,8 @@ def test_finalize_recommendation_is_idempotent_same_list() -> None:
     items1 = mgr.finalize_recommendation(session=s, repo=repo)
     items2 = mgr.finalize_recommendation(session=s, repo=repo)
     assert [it.food_code for it in items1] == [it.food_code for it in items2]
-    assert s.final_reason == "rule_engine_fallback_empty_ai"
+    # V1 默认纯规则路径 → legacy_rule_engine（rule_engine_fallback_empty_ai 仅旧回退语义）
+    assert s.final_reason == "legacy_rule_engine"
 
 
 # ============== 11. AI slow 模式 → ChatService timeout 回退 ==============
@@ -326,7 +338,9 @@ def test_finalize_recommendation_is_idempotent_same_list() -> None:
 @pytest.mark.anyio
 async def test_slow_ai_triggers_timeout_fallback_via_chat_service() -> None:
     settings = _make_settings(mock_ai_mode="slow", mock_ai_seed=0)
-    slow_chat = ChatService(settings=settings)
+    # 显式短超时（500ms），确保 mock slow（16s 延迟）必定触发 asyncio.timeout 回退，
+    # 不受配置里 ai_timeout_ms（默认 30s）变化影响。
+    slow_chat = ChatService(settings=settings, default_timeout_ms=500)
     repo = get_food_dictionary_repository()
     out = await slow_chat.generate_final_recommendation(
         system_prompt="sys", user_prompt="[FINAL_GENERATION] user"
@@ -337,6 +351,7 @@ async def test_slow_ai_triggers_timeout_fallback_via_chat_service() -> None:
         questionnaire_answers_by_qid={},
         questionnaire_version="v1.0",
         dictionary_version="v1.0",
+        generation_mode="ai",  # 需要走 AI 增益链路（V1 默认 rule 会直接短路）
         rule_answers=_make_rule_answers(),
     )
     items = await mgr.try_ai_finalize_recommendation(session=s, repo=repo)

@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     # 模型名（OpenAI 兼容格式）：deepseek 官方最便宜 V4 Flash
     ai_model: str = "deepseek-v4-flash"
 
+    # AI 调用超时（毫秒）。DeepSeek 高峰期响应可能 15-30s，
+    # 默认 30s 可大幅减少"AI 服务响应超时→回退规则引擎"的情况。
+    ai_timeout_ms: int = Field(default=30_000, ge=1_000, le=120_000)
+
     # MockAIProvider 调试参数（只在 ai_provider=mock/auto 无密文时生效）
     # 模式：normal（默认正常 JSON）/ slow（9s 延迟，模拟超时）
     #       / invalid_json（损坏 JSON）/ out_of_bounds_food_code（越界 food_code）
@@ -88,8 +92,18 @@ class Settings(BaseSettings):
     # 示例 2：Sentinel/Cluster 请先改造 RedisRateLimiter，本字段目前只支持单节点
     redis_url: str = ""
 
-    frontend_origins: str = "http://localhost:5173"
+    # Canonical browser URL is localhost; accept loopback spelling too so
+    # direct visits to 127.0.0.1 keep working during local development.
+    frontend_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     public_min_sample_size: int = 3
+
+    # ============== 观测 & 日志（P7-09 仪表盘最小接口）==============
+    # 结构化日志（JSONL）与 in-memory 缓冲的落盘目录（相对路径会被解析为相对于 backend/ 进程 cwd）
+    log_dir: str = ".local/logs"
+    # ai_call_meta 内存环形缓冲大小（仪表盘只读这部分；不填 = 默认 2000 条，约 3–10 MB 内存）
+    ai_stats_buffer_size: int = Field(default=2000, ge=100, le=200_000)
+    # ai_call_meta 落盘文件（留空 = 不持久化文件，只保留进程内缓冲）
+    ai_call_meta_file: str = "ai_call_meta.jsonl"
 
     @field_validator("ai_api_key")
     @classmethod
@@ -144,4 +158,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

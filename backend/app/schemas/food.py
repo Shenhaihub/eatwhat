@@ -58,6 +58,9 @@ class QuestionnaireAnswers(BaseModel):
     )
     tastes: list[Taste] = Field(default_factory=list)
     budget: BudgetTier | None = None
+    # P1 修复：菜系偏好（多选）—— 来自新增 q07_cuisine_preference 题目或 AI 追问
+    # 匹配逻辑：若用户显式选择且与 food.cuisine_groups 无交集 → 大扣分；有交集 → 大加分
+    cuisine_preferences: list[CuisineGroup] = Field(default_factory=list)
     max_distance_m: int | None = Field(
         default=None,
         ge=500,

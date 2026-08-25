@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 
 import * as apiClient from '../services/api/client';
 import type {
@@ -14,6 +15,18 @@ import type {
   RestaurantSearchResponseV1,
 } from '../services/api/types';
 import Nearby from '../pages/Nearby';
+
+/**
+ * useSearchParams 依赖 Router context；在 vitest 测试环境下默认没包 Router
+ * 会导致 Nearby 直接崩。统一用 MemoryRouter 包一层。
+ */
+function renderNearby(initialEntry = '/nearby') {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Nearby />
+    </MemoryRouter>,
+  );
+}
 
 const DEMO_ITEMS: DemoLocationItem[] = [
   {
@@ -64,7 +77,7 @@ describe('/nearby 地点选择页（P3-01）', () => {
         data: makeTokenInfo('光谷广场', '洪山区'),
       } as DemoLocationSelectResponse);
 
-    render(<Nearby />);
+    renderNearby();
 
     // 默认 tab 是 browser，先切到 demo
     await user.click(screen.getByTestId('tab-demo'));
@@ -96,7 +109,7 @@ describe('/nearby 地点选择页（P3-01）', () => {
         ],
       } as LocationSearchResponseV1);
 
-    render(<Nearby />);
+    renderNearby();
 
     await user.click(screen.getByTestId('tab-manual'));
     await user.type(screen.getByTestId('search-keyword-input'), '光谷');
@@ -122,7 +135,7 @@ describe('/nearby 地点选择页（P3-01）', () => {
     const user = userEvent.setup();
     const searchSpy = vi.spyOn(apiClient.api, 'locationSearch');
 
-    render(<Nearby />);
+    renderNearby();
     await user.click(screen.getByTestId('tab-manual'));
     await user.click(screen.getByTestId('search-submit'));
 
@@ -155,7 +168,7 @@ describe('/nearby 地点选择页（P3-01）', () => {
       configurable: true,
     });
 
-    render(<Nearby />);
+    renderNearby();
     await user.click(screen.getByTestId('browser-locate-btn'));
 
     await waitFor(() => expect(reverseSpy).toHaveBeenCalledTimes(1));
@@ -178,7 +191,7 @@ describe('/nearby 地点选择页（P3-01）', () => {
       data: makeTokenInfo('光谷广场', '洪山区'),
     } as DemoLocationSelectResponse);
 
-    render(<Nearby />);
+    renderNearby();
     await user.click(screen.getByTestId('tab-demo'));
     await waitFor(() => expect(screen.getByTestId('demo-list')).toBeInTheDocument());
     await user.click(screen.getByTestId('demo-select-wuhan_optics_valley'));
@@ -205,7 +218,7 @@ describe('/nearby 地点选择页（P3-01）', () => {
       data: makeTokenInfo('光谷广场', '洪山区'),
     } as DemoLocationSelectResponse);
 
-    render(<Nearby />);
+    renderNearby();
     await user.click(screen.getByTestId('tab-demo'));
     await waitFor(() => expect(screen.getByTestId('demo-list')).toBeInTheDocument());
     await user.click(screen.getByTestId('demo-select-wuhan_optics_valley'));
@@ -256,7 +269,7 @@ async function setupSelectedLocation(user: ReturnType<typeof userEvent.setup>) {
     data: makeTokenInfo('光谷广场', '洪山区'),
   } as DemoLocationSelectResponse);
 
-  render(<Nearby />);
+  renderNearby();
   await user.click(screen.getByTestId('tab-demo'));
   await waitFor(() => expect(screen.getByTestId('demo-list')).toBeInTheDocument());
   await user.click(screen.getByTestId('demo-select-wuhan_optics_valley'));

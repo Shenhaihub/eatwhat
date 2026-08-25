@@ -1,7 +1,25 @@
-# EatWhat Backend（FastAPI + Supabase + Pydantic v2 + P5 DeepSeek AI）
+# EatWhat Backend（FastAPI + Supabase + AI + B 阶段社区）
 
-> 面向"今天吃什么"场景的推荐后端，分层架构：
-> **API Router → Service（规则引擎 / MockAI / DeepSeek Live）→ Supabase（RLS）**
+> 分层架构：
+> **API Router → Service（规则引擎 / RecommendationSession 状态机 / MockAI / DeepSeek Live + 限流预占回滚）→ Supabase（RLS）**
+
+## 0. 交付概览（已完成 P2–P5 路径 A + A/B 冲刺）
+
+| 模块 | 文件 | 关键能力 |
+|---|---|---|
+| 推荐（单步 + 会话） | `api/v1/recommendations.py` | P2 单步 Top5；P5 session/start → answer（最多 3 轮）→ final 1→3→5 渐进 |
+| AI 增益 & 回退 | `services/ai/service.py` + `recommendation_session.py` | A：`generation_mode` 显式（rule / ai）；ai 失败静默回退规则引擎，**9 种失败码细分** |
+| AI 日额度（预占-回滚） | `services/ai/rate_limiter.py` | A：双维度（用户/全局）日限流；进程内 TTLCache + 可选 Redis；**预占→成功才扣、失败全退**（保证用户额度不被浪费） |
+| 问卷字典 & 推进 | `api/v1/questionnaire.py` + `services/questionnaire_state.py` | 2~3 基础题 + 2~3 自适应题（后端选择下一题） |
+| Auth + GDPR | `api/v1/auth.py` | Supabase Magic Link JWT；DELETE /auth/me 删除账号 + 立即吊销 token 再访 401 |
+| 历史 + 画像 | `api/v1/history.py` + `api/v1/preferences.py` | RLS；session_id/final_reason 元信息；画像快照 |
+| 附近商家（POI） | `api/v1/location.py` + `services/poi_provider.py` | 高德 Key / Mock 双模式；`?food_code=xxx` 直达 |
+| 社区（B 阶段） | `api/v1/community.py` | feed / trending / theme + vote / feed + like；**匿名可读，写操作需登录** |
+| AI 统计观测 | `api/v1/system.py` + `core/ai_stats.py` | `/system/ai-stats` 脱敏输出 sample_size / 画像使用率 / outcome 分布 |
+| 配置 & 安全 | `core/config.py` + `core/encryption.py` | 明文 `sk-*` fail-fast 拦截；AI API Key Fernet + PBKDF2 加密 |
+| 统一错误 & 观测 | `core/exceptions.py` + `core/middleware.py` + `core/logging.py` | `{ error: {code, message}, request_id }`；敏感字段统一 redact |
+
+---
 
 ## 0. 技术栈速览
 
@@ -42,7 +60,7 @@ cp .env.example .env     # Windows:  copy .env.example .env
 3. **AI 4+2 项**：见下方 §2。
 4. POI：高德 Key 做餐馆定位；留空走假数据。
 5. Redis：多 worker 严格限流用；留空降级 TTLCache。
-6. CORS：`FRONTEND_ORIGINS` 填前端 dev server 地址。
+6. CORS：`FRONTEND_ORIGINS` 默认填写 `http://localhost:5173,http://127.0.0.1:5173`；浏览器规范地址是 `http://localhost:5173/`，两种本机回环写法都可用。
 
 **校验配置是否有效**（不启动服务器）：
 
@@ -122,8 +140,56 @@ uv run uvicorn app.main:app --reload --port 8000
 6. `DELETE /auth/me` 204 GDPR 删号；
 7. **死 token 防线**：删除后再 `POST /history` 必须 401，且 Supabase admin 查询用户不存在。
 
-## 4. AI 失败原因细分（P5-09）—— `session.final_reason`
+## 3.1 社区（B 阶段）—— 5 条接口速记
 
+> 全部挂载在 `/api/v1/community/*`；**GET 匿名可读；POST（写操作）必须登录**。
+> 内存存储 Mock MVP（重开会重置），P3 会落到 Supabase。
+
+| 方法 | 路径 | 入参（Query/Body） | 典型响应 | 核心约束 |
+|---|---|---|---|---|
+| GET | `/feed` | `sort=hot \| latest`（默认 latest） | `{sort, items[]}`，item 里 `liked_by_me` 登录才按 user_id 填 | 排序：hot = `likes*2 + comments*3` 倒序；latest = `created_at` 倒序 |
+| GET | `/trending` | 无 | `{items[5]}`；字段 `{rank, food_code, cuisine_tag, recommended_today}` | Top 5 固定返回；`recommended_today` 是 mock 稳定值 |
+| GET | `/theme` | 无 | `{title, subtitle, ends_at, total_votes?, voted_key, options[{key,label,votes,percent}]}` | 登录态返回 `voted_key`（已投 key / 未投 = null）；匿名固定 null |
+| POST | `/theme/vote` | `{ option_key: string }` | `{voted_key, options, duplicated}` | **幂等**：同 key 重复投 → duplicated=true；已投过**不同** key → 409 `ALREADY_VOTED_OTHER` |
+| POST | `/feed/{id}/like` | Path `id`（URL-encoded） | `{liked: true, likes: N, duplicated}` | **幂等**：重复点 duplicated=true，likes 数字**不叠加** |
+
+社区接口测试 `tests/test_api_community.py` 共 9 条（必读 + 必写覆盖）：
+
+```powershell
+uv run pytest tests/test_api_community.py -q
+# 1. feed 默认 latest 10 条时间倒序
+# 2. feed hot 按热度降序，登录后 liked_by_me 正确填充
+# 3. trending 返回 5 条、rank 1..5 递增
+# 4. theme 返回正确结构 & 匿名 voted_key=null
+# 5. theme/vote 登录投票 → duplicated/正常双态
+# 6. theme/vote 投不同选项 409 ALREADY_VOTED_OTHER
+# 7. theme/vote 匿名 401（AUTH_REQUIRED）
+# 8. feed/like 正常点赞 + 幂等 duplicated
+# 9. feed/like 匿名 401
+```
+
+## 4. AI 生成模式 + 失败原因（A 阶段）—— `generation_mode` + `final_reason`
+
+### 4.1 `generation_mode`（A 阶段核心开关）
+前端 `/recommendations/session/start` 和 `POST /recommendations` 都传 `prefer_ai_gain: boolean`，后端派生：
+- `false` → `generation_mode = "rule"`：**跳过一切 AI 调用**，直接走规则引擎产出 Top5。`final_reason` 恒为 `legacy_rule_engine`，前端显示中性蓝色「规则引擎」徽章，避免用户误解"AI 挂了"。
+- `true` → `generation_mode = "ai"`：**先尝试调用 ChatService**；成功 = `ai_gain`；**任何失败** 按 §4.2 细分 → **静默回退规则引擎**。
+
+### 4.2 AI 额度：预占 → 成功才扣、失败全退
+（对应 `services/ai/rate_limiter.py` + `service.py`）
+
+```
+调用前  reserve(user_id=X, 1)            # 预占：counter += 1
+          │ AI 成功 (final_reason=ai_gain)
+          ├─ commit：预占保持（真正扣掉）✅
+          │ AI 失败（超时/429/schema/鉴权…共 9 类）
+          └─ rollback(user_id=X, 1)       # 加回去，用户额度无损 ↩️
+```
+
+双维度（用户 / 全局）并行限：任一先到上限 → 返回 `rule_engine_fallback_ai_local_quota`，并且同样走 rollback（不会因为"预占后超限"白扣）。
+Redis 是可选的：**留空 REDIS_URL → 自动降级进程内 TTLCache**，单机 MVP 零配置即可。
+
+### 4.3 9 种 `final_reason`（前端 badge 颜色对应）
 > 推荐链路永远 fail-open：任何 AI 失败 → 静默切回规则引擎，用户无感。
 > 失败原因作为元数据写入 History 表 `recommendation_snapshot._meta.final_reason`，前端显示为来源 chip（颜色 + 摘要）。
 
@@ -152,8 +218,12 @@ backend/
 │   ├─ api/v1/
 │   │   ├─ auth.py               # Magic Link + JWT 校验 + GDPR DELETE /auth/me
 │   │   ├─ history.py            # CRUD + session_id/final_reason 元信息解析
-│   │   ├─ recommendations.py    # 推荐：P2 单步 + P5 session/start & answer
-│   │   └─ questionnaire.py      # 问卷 v1.0 字典 + 下一题推进
+│   │   ├─ recommendations.py    # 推荐：P2 单步 + P5 session/start & answer（generation_mode 分流）
+│   │   ├─ questionnaire.py      # 问卷 v1.0 字典 + 下一题推进
+│   │   ├─ community.py          # B 阶段：feed / trending / theme + vote / feed + like
+│   │   ├─ preferences.py        # 用户画像偏好快照（GET/PUT）
+│   │   ├─ location.py           # 附近商家（高德 + Mock POI；?food_code=xxx 直达）
+│   │   └─ system.py             # /health/{live,ready} + /system/ai-stats
 │   ├─ core/
 │   │   ├─ config.py             # Settings；AI_API_KEY 明文检测（fail-fast）
 │   │   ├─ encryption.py         # Fernet + PBKDF2 对称加密；AI_API_KEY 解密
@@ -172,7 +242,9 @@ backend/
 ├─ scripts/
 │   └─ encrypt_ai_key.py         # AI API Key 加密工具（交互 + 一键生成双模式）
 └─ tests/
-    ├─ test_ai_rate_limiter.py   # P5-07 8 条
+    ├─ test_api_community.py     # B：社区 5 条接口 9 用例（feed sort/登录 liked_by_me/trending/theme vote 409/like 幂等…）
+    ├─ test_ai_rate_limiter.py   # P5-07 / A：双维度 + 预占回滚（并发/换日/双维度交错 8+）
+    ├─ test_recommendation_session.py  # A：generation_mode 分流（rule 直接出 / ai 回退不白扣）
     ├─ test_deepseek_provider.py # P5-03 13 条（httpx.MockTransport）
     ├─ test_ai_encryption.py     # P5-03B 加密/解密/密文错/无口令等
     └─ test_ai_provider.py       # ChatService 整合：Mock 正常/越界/超时回退

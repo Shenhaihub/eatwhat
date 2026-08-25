@@ -1,0 +1,158 @@
+# =============================================================
+# EatWhat · docker-compose.yml（C2 部署骨架）
+# 服务：
+#   - backend  : FastAPI + Uvicorn（Python 3.13 · uv 构建）
+#   - frontend : Nginx 托管 vite dist + /api 反代到 backend:8000
+#   - redis    : 可选（profile=ai-cluster 才启动）；不启用 Redis 时后端自动降级 TTLCache
+#
+# Windows 两种跑法（都等价）—— 经验参考：
+#   · docker pull / docker ps / docker run 这些命令和「当前目录」完全没关系，
+#     只有 docker compose 会根据 compose 文件所在目录解析 relative path（build: context）。
+#
+# 跑法 A：切到项目根目录（推荐）————————————————————————————————————————————
+#   cd d:\A622\项目\AgentWork\project0717
+#   docker compose config     # 先看解析是否 OK（不启动）
+#   docker compose build      # 构建两个镜像（首次慢，之后靠 layer cache）
+#   docker compose up -d      # 后台启动
+#   docker compose logs -f    # 看日志
+#   docker compose down       # 停止（加 -v 会清掉 redis 数据卷）
+#
+# 跑法 B：不切目录，直接 -f 指定绝对路径（适合写脚本 / 计划任务）——————————
+#   docker compose -f "d:\A622\项目\AgentWork\project0717\docker-compose.yml" up -d
+#
+# 如果要启用 Redis（多 worker 严格 AI 日限额）：
+#   docker compose --profile ai-cluster up -d
+#   并在 backend/.env 设置 REDIS_URL=redis://redis:6379/0
+# =============================================================
+
+name: eatwhat
+
+services:
+  # =========================================================
+  # Backend · FastAPI + Uvicorn
+  # =========================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: runtime
+    image: eatwhat-backend:latest
+    container_name: eatwhat-backend
+    restart: unless-stopped
+
+    # 环境变量：先读 backend/.env（如果有），没有就用 backend/.env.example（mock 模式能直接启动）
+    # 注意：compose 的 env_file 里的值会被下面 environment 覆盖；我们只放通用覆盖项。
+    env_file:
+      - path: ./backend/.env
+        required: false
+      - path: ./backend/.env.example
+        required: true
+    environment:
+      # compose 里的 frontend 容器 + 宿主机的浏览器都需要被 CORS 放行
+      # 后端 config 支持英文逗号分隔的多 origin（无空格）
+      FRONTEND_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://frontend"
+      # 如果启用了 redis profile：让 backend 连 compose 的 redis 服务名
+      # （没启用也没事，backend 读到非空才会切 Redis；示例写法你懂意思就好）
+      # REDIS_URL: redis://redis:6379/0
+
+    networks:
+      - backend-tier
+      - default
+
+    # 单机映射 8000 出来方便直接打 /docs 调试；生产你可以把 ports 去掉（只让 frontend 反代）
+    ports:
+      - "8000:8000"
+
+    # 给 logs 滚动（不然 AI jsonl 会炸磁盘；jsonl 在 volume 里也滚动）
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    volumes:
+      # AI 观测 JSONL 落到宿主机本地保留（backend/.local/logs），方便后续分析
+      - ./backend/.local/logs:/app/.local/logs:rw
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys;\nr=urllib.request.urlopen('http://127.0.0.1:8000/health/live',timeout=2);\nsys.exit(0 if r.status==200 else 1)"]
+      interval: 20s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  # =========================================================
+  # Frontend · Nginx 托管 SPA + /api 反代
+  # =========================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: runtime
+    image: eatwhat-frontend:latest
+    container_name: eatwhat-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    networks:
+      - default
+      # frontend 也接 backend-tier 方便 compose 内直接解析 backend:8000
+      - backend-tier
+
+    ports:
+      # 浏览器访问 http://localhost:8080/ 即可
+      - "8080:80"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/index.html >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+  # =========================================================
+  # Redis · 可选（多 worker AI 日限额用；--profile ai-cluster 才起来）
+  # =========================================================
+  redis:
+    image: redis:7-alpine
+    container_name: eatwhat-redis
+    profiles: ["ai-cluster"]
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    networks:
+      - backend-tier
+    ports:
+      - "127.0.0.1:6379:6379"   # 只暴露到 localhost，防止外部扫
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+# =========================================================
+# Networks
+# =========================================================
+networks:
+  default:
+    name: eatwhat-public
+  backend-tier:
+    name: eatwhat-backend-tier
+    internal: false   # 如果你想彻底隔离：改成 true，但 redis 就不能从宿主机连了
+
+# =========================================================
+# Volumes
+# =========================================================
+volumes:
+  redis-data:
+    name: eatwhat-redis-data

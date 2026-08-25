@@ -72,6 +72,12 @@ class AIRateLimiter(Protocol):
     async def consume_or_reject(self, *, user_id: str) -> AIRateLimitResult:  # pragma: no cover
         ...
 
+    async def rollback_consume(self, *, user_id: str) -> None:  # pragma: no cover
+        """P5-05：AI 真正失败时返还一次"预占"额度（consume 后如果模型调用/校验失败，
+        需要调用本方法，保证"成功才扣、失败全退"语义。多次 rollback 最多退回 0，
+        不会产生负计数。仅保证同 user_id 和全局维度各回退 1 次/次调用。"""
+        ...
+
 
 # ============================================================
 # 1) 进程内实现（默认）
@@ -139,6 +145,20 @@ class AIRateLimiterLocal:
                 user_limit=self._user_limit,
                 global_limit=self._global_limit,
             )
+
+    async def rollback_consume(self, *, user_id: str) -> None:
+        """返还一次消费（用户维度 + 全局维度各 -1，最低 0）。"""
+        user_key = f"{_day_key()}:{user_id}"
+        global_key = _day_key()
+        with self._lock:
+            for key, cache in (
+                (user_key, self._user_cache),
+                (global_key, self._global_cache),
+            ):
+                cur = cache.get(key, 0) or 0
+                if cur <= 0:
+                    continue
+                cache[key] = cur - 1
 
 
 # ============================================================
@@ -334,6 +354,31 @@ class AIRateLimiterRedis:
             await self._redis.aclose()
         except Exception as exc:  # noqa: BLE001
             log.warning("ai_rate_limiter_redis_close err_type=%s", type(exc).__name__)
+
+    async def rollback_consume(self, *, user_id: str) -> None:
+        """user 维度 + 全局维度各 DECR 1，最低 0。错误 fail-safe 静默。"""
+        day = _day_key()
+        user_key = f"{_USER_KEY_PREFIX}{day}:{user_id}"
+        global_key = f"{_GLOBAL_KEY_PREFIX}{day}"
+        try:
+            async with self._redis.pipeline(transaction=True) as pipe:
+                # DECR 后若 < 0 → 再 SET 0（防止并发/多次 rollback 产生负数），
+                # 用先 DECR 再 SETRANGE/CLAMP：Redis 没有 CLAMP 命令，所以先 GET
+                for k in (user_key, global_key):
+                    cur_raw = await self._redis.get(k)
+                    try:
+                        cur = int(cur_raw) if cur_raw is not None else 0
+                    except (TypeError, ValueError):
+                        cur = 0
+                    if cur > 0:
+                        # 直接 SET cur-1 比 DECR + 再判断更原子且少一次 round-trip
+                        await self._redis.set(k, str(cur - 1), keepttl=True)
+        except Exception as exc:  # noqa: BLE001 - 限流返还失败最多"多扣一次"，不影响主流程
+            log.warning(
+                "ai_rate_limiter_redis_rollback_fail err_type=%s msg=%s",
+                type(exc).__name__,
+                exc,
+            )
 
 
 # ============================================================

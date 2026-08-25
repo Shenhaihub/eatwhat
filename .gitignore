@@ -67,6 +67,15 @@ Compressed (zipped) Folder*.zip
 tmp/
 temp/
 
+# --- Local runtime data / screen recordings / scratch scripts (never commit) ---
+.local/
+backend/.local/
+frontend/.local/
+*.mp4
+*.mov
+_tmp_*.py
+_tmp_expand_dict.py
+
 # --- E2E / debug artifacts (may contain session tokens) ---
 _e2e_*.json
 backend/_e2e_*.json

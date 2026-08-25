@@ -46,7 +46,7 @@ from .rate_limiter import AIRateLimiter, AIRateLimitResult
 
 log = logging.getLogger("app.services.ai.service")
 
-DEFAULT_CHAT_TIMEOUT_MS = 8_000
+DEFAULT_CHAT_TIMEOUT_MS = 15_000
 DEFAULT_FINAL_TEMPERATURE = 0.3
 DEFAULT_FOLLOW_UP_TEMPERATURE = 0.5
 
@@ -110,15 +110,57 @@ class ChatService:
         settings: Settings,
         provider_override: AIProvider | None = None,
         rate_limiter: AIRateLimiter | None = None,
-        default_timeout_ms: int = DEFAULT_CHAT_TIMEOUT_MS,
+        default_timeout_ms: int | None = None,
         extra_telemetry: Mapping[str, Any] | None = None,
     ) -> None:
         self._settings = settings
-        self._default_timeout_ms = int(default_timeout_ms)
+        # 未显式指定时，优先用配置里的 ai_timeout_ms（DeepSeek 高峰期 15-30s 都可能），
+        # 兜底用模块级 DEFAULT_CHAT_TIMEOUT_MS。
+        timeout = (
+            default_timeout_ms
+            if default_timeout_ms is not None
+            else int(getattr(settings, "ai_timeout_ms", DEFAULT_CHAT_TIMEOUT_MS))
+        )
+        self._default_timeout_ms = int(timeout)
         self._telemetry_base: dict[str, Any] = dict(extra_telemetry or {})
         self._rate_limiter = rate_limiter
         # 允许测试/演示注入 mock 实例（例如 out_of_bounds_food_code 模式）
         self._provider_override = provider_override
+
+    @property
+    def rate_limiter(self) -> AIRateLimiter | None:
+        """只读：给外层业务层 peek 当前用户额度或执行自定义 rollback。"""
+        return self._rate_limiter
+
+    def peek_quota(self, *, user_id: str | None) -> dict[str, int]:
+        """返回当前用户今日额度使用情况（仅查询，不扣）。
+        返回 {user_used, user_limit, global_used, global_limit}。
+        未登录（user_id=None）返回 0 used 但保留 limit。"""
+        from .rate_limiter import (
+            AIRateLimiterLocal,
+            _day_key as _rl_day_key,  # 避免重名
+        )
+
+        rl = self._rate_limiter
+        user_limit = int(getattr(self._settings, "ai_daily_user_limit", 0) or 0)
+        global_limit = int(getattr(self._settings, "ai_global_daily_limit", 0) or 0)
+        user_used = 0
+        global_used = 0
+        # 目前只支持直接查询 Local 实现（Redis 实现需要 GET 两次，
+        # 若用户要 P5-07B 再补；默认 Local 足够 Demo/个人使用场景）
+        if isinstance(rl, AIRateLimiterLocal):
+            day = _rl_day_key()
+            user_key = f"{day}:{user_id}" if user_id else None
+            global_key = day
+            if user_key is not None:
+                user_used = int(rl._user_cache.get(user_key, 0) or 0)  # type: ignore[attr-defined]
+            global_used = int(rl._global_cache.get(global_key, 0) or 0)  # type: ignore[attr-defined]
+        return {
+            "user_used": user_used,
+            "user_limit": user_limit,
+            "global_used": global_used,
+            "global_limit": global_limit,
+        }
 
     # ============== 对外：动态追问生成 ==============
     async def generate_follow_up(
@@ -168,6 +210,18 @@ class ChatService:
         validated = self._safe_validate_json(raw, FollowUpQuestionOutput, tag="follow_up")
         if validated is None:
             _set_last_fail_code(FAIL_SCHEMA)
+            # P5-05：follow_up schema 失败同样回滚本次额度预占
+            if self._rate_limiter is not None and user_id is not None:
+                try:
+                    await self._rate_limiter.rollback_consume(
+                        user_id=user_id if user_id is not None else "__anon__"
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning(
+                        "ai_quota_rollback_schema_fail tag=follow_up "
+                        "err_type=%s",
+                        type(exc).__name__,
+                    )
         return validated
 
     # ============== 对外：最终 5 候选生成 ==============
@@ -207,6 +261,18 @@ class ChatService:
         validated = self._safe_validate_json(raw, FinalRecommendationOutput, tag="final_rec")
         if validated is None:
             _set_last_fail_code(FAIL_SCHEMA)
+            # P5-05：schema 校验失败也算失败，把 _raw_chat_catch_all 中预占的额度回滚
+            if self._rate_limiter is not None and user_id is not None:
+                try:
+                    await self._rate_limiter.rollback_consume(
+                        user_id=user_id if user_id is not None else "__anon__"
+                    )
+                except Exception as exc:  # noqa: BLE001 - 告警即可，不阻塞主返回
+                    log.warning(
+                        "ai_quota_rollback_schema_fail tag=final_recommendation "
+                        "err_type=%s",
+                        type(exc).__name__,
+                    )
         return validated
 
     # ============== 内部实现 ==============
@@ -219,7 +285,15 @@ class ChatService:
         telemetry_tag: str,
         user_id: str | None = None,
     ) -> str | None:
-        """实际调用 Provider，所有异常 → 返回 None，并按 P5-09 分类写入 fail_code。"""
+        """实际调用 Provider，所有异常 → 返回 None，并按 P5-09 分类写入 fail_code。
+
+        P5-05：额度语义变更为"成功才扣、失败全退"——
+            1. 先调用 consume_or_reject 预占 1 次额度（超限直接拒绝）
+            2. 再调用真实 Provider
+            3. 若最终返回结果为 None（无论什么原因：网络/schema/timeout 等），
+               调用 rollback_consume 将本次预占退回，最终计数 +1 再 -1 = 0
+        所以只有调用方真正拿到了一段可用于 Pydantic 校验的原始 JSON 字符串，
+        才会最终让额度计数器 + 1 保留（不 rollback）。"""
         telemetry = {**self._telemetry_base, "tag": telemetry_tag, "n_msgs": len(messages)}
         try:
             provider = self._build_provider()
@@ -235,11 +309,10 @@ class ChatService:
 
         # P5-07：真实 provider 才消耗额度；Mock 本地生成不计入
         is_mock_provider = isinstance(provider, MockAIProvider)
+        rate_limiter_applied = False
+        quota_user_id = user_id if user_id is not None else "__anon__"
         if (not is_mock_provider) and self._rate_limiter is not None:
             rl: AIRateLimiter = self._rate_limiter
-            # user_id 未绑定时，传"匿名占位 id"，让 consume_or_reject 仍然能正确
-            # 执行全局限流（用户维度未绑则跳过，但全局计数照常）。
-            quota_user_id = user_id if user_id is not None else "__anon__"
             result: AIRateLimitResult = await rl.consume_or_reject(user_id=quota_user_id)
             if not result.allowed:
                 _set_last_fail_code(FAIL_LOCAL_QUOTA)
@@ -257,10 +330,12 @@ class ChatService:
                 )
                 # fail-open → 返回 None，让上层自动切规则引擎兜底
                 return None
+            rate_limiter_applied = True
 
+        raw_out: str | None = None
         try:
             async with asyncio.timeout(timeout_ms / 1000.0):
-                return await provider.chat(
+                raw_out = await provider.chat(
                     messages=messages,
                     temperature=temperature,
                     timeout_ms=timeout_ms,
@@ -273,7 +348,6 @@ class ChatService:
                 timeout_ms,
                 telemetry,
             )
-            return None
         except httpx.TimeoutException as exc:
             _set_last_fail_code(FAIL_TIMEOUT)
             log.warning(
@@ -282,7 +356,6 @@ class ChatService:
                 type(exc).__name__,
                 telemetry,
             )
-            return None
         except httpx.HTTPStatusError as exc:
             code = _classify_http_status_code(exc.response.status_code)
             _set_last_fail_code(code)
@@ -293,7 +366,6 @@ class ChatService:
                 code,
                 telemetry,
             )
-            return None
         except httpx.HTTPError as exc:
             # ConnectError / NetworkError 等非 2xx / 非超时类网络错误
             _set_last_fail_code(FAIL_UNKNOWN)
@@ -303,7 +375,6 @@ class ChatService:
                 type(exc).__name__,
                 telemetry,
             )
-            return None
         except Exception as exc:  # noqa: BLE001 - 设计上，任何 AI 失败都不能把推荐打挂
             _set_last_fail_code(FAIL_UNKNOWN)
             log.warning(
@@ -312,7 +383,19 @@ class ChatService:
                 type(exc).__name__,
                 telemetry,
             )
-            return None
+
+        # P5-05：失败 rollback 额度（成功才扣；任何异常/超时全退）
+        if raw_out is None and rate_limiter_applied and self._rate_limiter is not None:
+            try:
+                await self._rate_limiter.rollback_consume(user_id=quota_user_id)
+            except Exception as exc:  # noqa: BLE001 - 限流回滚失败只告警，不影响主返回
+                log.warning(
+                    "ai_quota_rollback_fail tag=%s err_type=%s telemetry=%s",
+                    telemetry_tag,
+                    type(exc).__name__,
+                    telemetry,
+                )
+        return raw_out
 
     def _build_provider(self) -> AIProvider:
         """按 settings 选择具体 Provider。DeepSeek 分支里密钥只在这里局部变量存活。"""

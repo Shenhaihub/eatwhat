@@ -1,0 +1,30 @@
+# backend/.dockerignore
+# 目标：最小化 COPY context，加速 build；避免把本地机密/大文件打进镜像
+
+# ---- 本地开发目录 / 机密 ----
+.venv/
+.local/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.*
+!.env.example
+
+# ---- 测试（可选：生产镜像不跑 pytest，不用拷；E2E 单独跑） ----
+tests/
+e2e_browser.py
+_make_e2e_session.py
+_tmp_expand_dict.py
+
+# ---- 其它无关 ----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.log
+.DS_Store
+.git/
+.github/
+
+# ---- README 保留（方便运维进容器 `cat README.md` 排查）----
+# 不用删

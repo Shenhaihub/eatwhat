@@ -42,10 +42,10 @@ def test_A_empty_answers_first_call() -> None:
     assert "recommendations_source" not in body
     assert "questionnaire_mismatch" not in body
 
-    # 状态机一次最多返回 2 题（减少 UI 压力），所以首次只会出现在 required 前两道。
+    # 状态机一次最多返回 1 题（单题聚焦，避免 UI 并排），所以首次只会出 required 中第 1 道。
     next_ids = [q["question_id"] for q in body["next_questions"]]
-    assert next_ids == ["q01_meal_period", "q02_explicit_food"]
-    # required_missing 里应当还有 q03_budget（3 道 required，只展示了前 2 道，但缺的还是 3 道）
+    assert next_ids == ["q01_meal_period"]
+    # required_missing 里应当还有 q02/q03（3 道 required，只展示了第 1 道，但缺的还是 3 道）
     assert set(body["required_not_yet_answered_question_ids"]) == {
         "q01_meal_period",
         "q02_explicit_food",
@@ -74,6 +74,8 @@ def test_B_complete_answers_finish() -> None:
         "q04_tastes": ["light", "spicy"],
         "q05_avoidances": ["none"],
         "q06_appetite": ["normal"],
+        # P1 新增：q07 菜系偏好（q02=undecided 时 display_if 触发，需一并回答）
+        "q07_cuisine_preference": ["japanese", "korean"],
     }
     resp = _post({**BASE_ENTRY_VERSION, "answers_by_question_id": complete_answers})
     assert resp.status_code == 200, resp.text
@@ -87,9 +89,9 @@ def test_B_complete_answers_finish() -> None:
     # 3 required / 3 answered = 100%
     assert body["progress"] == 100
     assert body["progress_pct"] == 100
-    # 覆盖维度：meal_period/explicit_food_preference/budget/tastes/avoidances/appetite ≥6
+    # 覆盖维度：meal_period/explicit_food_preference/budget/tastes/avoidances/appetite/cuisine_preferences ≥7
     covered = {d["field_name"] for d in body["covered_dimensions"] if d["covered"]}
-    assert len(covered) >= 6
+    assert len(covered) >= 7
 
 
 # ======================================================

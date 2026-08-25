@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { History as HistoryIcon, PlusCircle, RotateCcw, Search, Settings, Trash2 } from 'lucide-react';
-import { Link } from 'react-router';
+import { AlertTriangle, History as HistoryIcon, PlusCircle, RotateCcw, Search, Settings, Trash2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
 import { api } from '../services/api/client';
 import type { HistoryRecord } from '../services/api/types';
 import type { RecommendationItem } from '../services/api/types/food';
 import { describeFinalReason } from '../lib/sourceBadge';
+import {
+  formatWipeSuccessNotice,
+  wipeAllPreferencesAndHistory,
+} from '../lib/wipeProfile';
+import { track } from '../lib/track';
 
 const PAGE_SIZE = 20;
 
@@ -37,6 +42,7 @@ function displayFoodName(item: unknown): string {
 }
 
 export default function History() {
+  const nav = useNavigate();
   const [records, setRecords] = useState<HistoryRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -48,6 +54,18 @@ export default function History() {
   const [clearing, setClearing] = useState(false);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [wiping, setWiping] = useState(false);
+  const [showConfirmWipe, setShowConfirmWipe] = useState(false);
+
+  const showToast = useCallback((txt: string, isError = false) => {
+    setError(isError ? txt : null);
+    if (!isError) {
+      // History 之前用 error 兼做清空成功提示；保持语义：非错误场景也塞到这里（UI toast-error 颜色偏红，
+      // 但实际没有单独的 toast-success，用 setError 复用同一个 banner 区域；临时再用 setTimeout 抹掉）。
+      setError(txt);
+      setTimeout(() => setError((cur) => (cur === txt ? null : cur)), 2800);
+    }
+  }, []);
 
   const loadList = useCallback(
     async (nextOffset: number, append: boolean) => {
@@ -97,13 +115,35 @@ export default function History() {
       setRecords([]);
       setTotal(0);
       setShowConfirmClear(false);
-      setError(`已清空 ${res.deleted} 条记录`);
-      setTimeout(() => setError(null), 2000);
+      showToast(`已清空 ${res.deleted} 条历史记录`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : '清空失败';
       setError(msg);
     } finally {
       setClearing(false);
+    }
+  };
+
+  // B：历史页新增「🔄 重新从零开始」，语义与画像页完全一致（4 类数据一起清）
+  const onWipeAll = async () => {
+    setWiping(true);
+    try {
+      track('history.wipe_all_confirm', { total_records: total });
+      const result = await wipeAllPreferencesAndHistory();
+      setRecords([]);
+      setTotal(0);
+      setHasMore(false);
+      setOffset(0);
+      setShowConfirmWipe(false);
+      setShowConfirmClear(false);
+      showToast(formatWipeSuccessNotice(result));
+      // 归零后直接跳推荐页从头开始完整问卷
+      window.setTimeout(() => nav('/recommend', { replace: true }), 450);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '重置失败';
+      setError(msg);
+    } finally {
+      setWiping(false);
     }
   };
 
@@ -145,6 +185,23 @@ export default function History() {
           <Link to="/settings" className="btn btn-ghost btn-sm" aria-label="账户设置">
             <Settings size={16} aria-hidden />
           </Link>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              track('history.wipe_all_click', { total_records: total });
+              setShowConfirmWipe(true);
+            }}
+            title="一键归零：清空画像 + 推荐历史 + 问卷草稿 + 横幅隐藏记忆"
+            style={{
+              borderColor: 'color-mix(in oklab, #e67e22 55%, var(--color-border))',
+              background: 'color-mix(in oklab, #e67e22 12%, var(--color-surface))',
+              color: 'color-mix(in oklab, #c0392b 70%, var(--color-text))',
+            }}
+          >
+            <RotateCcw size={16} aria-hidden />
+            <span>🔄 重新从零开始</span>
+          </button>
           {records.length > 0 ? (
             <button
               type="button"
@@ -154,7 +211,7 @@ export default function History() {
               aria-label="清空全部历史"
             >
               <Trash2 size={16} aria-hidden />
-              <span>清空</span>
+              <span>仅清空历史</span>
             </button>
           ) : null}
         </div>
@@ -294,9 +351,10 @@ export default function History() {
       {showConfirmClear ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="清空确认">
           <div className="modal-card">
-            <h3>清空全部历史？</h3>
+            <h3>仅清空推荐历史？</h3>
             <p>
-              将删除 <strong>{total}</strong> 条推荐记录。此操作不可撤销，你确定要继续吗？
+              只删除 <strong>{total}</strong> 条推荐记录，<strong>画像快照、问卷草稿、横幅隐藏记忆保留</strong>。
+              如果你希望"下一次推荐从头答完整问卷"，请用 <strong>🔄 重新从零开始</strong>。
             </p>
             <div className="modal-actions">
               <button
@@ -313,7 +371,50 @@ export default function History() {
                 onClick={onClearAll}
                 disabled={clearing}
               >
-                {clearing ? '清空中…' : '确认清空全部'}
+                {clearing ? '清空中…' : '确认只清空历史'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showConfirmWipe ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="一键归零确认">
+          <div className="modal-card">
+            <div className="modal-head" style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+              <AlertTriangle size={20} style={{ color: '#e67e22', flexShrink: 0, marginTop: '4px' }} aria-hidden />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h3 style={{ margin: 0 }}>确认要把你的饮食偏好"一键归零"？</h3>
+              </div>
+            </div>
+            <p style={{ marginTop: 0 }}>
+              这会同时做 <strong>4</strong> 件事，<strong>全部删除后不可恢复</strong>：
+            </p>
+            <ol style={{ paddingLeft: '20px', lineHeight: 1.8, margin: '6px 0 var(--space-2)' }}>
+              <li>删除 <strong>全部画像快照</strong>（七维偏好画像全部清除）</li>
+              <li>删除 <strong>全部推荐历史</strong>（当前共 {total} 条）</li>
+              <li>清空 <strong>问卷草稿</strong>（下次进推荐会从头答完整问卷）</li>
+              <li>清空 <strong>活动横幅今日隐藏记忆</strong>（首页活动会重新出现）</li>
+            </ol>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  track('history.wipe_all_cancel', { total_records: total });
+                  setShowConfirmWipe(false);
+                }}
+                disabled={wiping}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={onWipeAll}
+                disabled={wiping}
+              >
+                {wiping ? '正在归零…' : '是的，重新从零开始'}
               </button>
             </div>
           </div>

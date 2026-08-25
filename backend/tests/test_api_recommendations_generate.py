@@ -31,18 +31,26 @@ def _top_food_code(resp_payload: list[dict]) -> str:
     return top["food_code"]
 
 
+def _items(resp) -> list[dict]:
+    """P7-07 适配：POST /api/v1/recommendations 返回 { items, merged_pref_fields }。"""
+    body = resp.json()
+    if isinstance(body, dict) and "items" in body:
+        return body["items"]
+    return body  # 兜底兼容老格式（若有）
+
+
 class TestBasicShape:
     def test_empty_answers_returns_exactly_five_items_priority_1_through_5(self):
         resp = client.post("/api/v1/recommendations", json=BASE_PAYLOAD)
         assert resp.status_code == 200, resp.text
-        items = resp.json()
+        items = _items(resp)
         assert len(items) == 5
         priorities = sorted(it["priority"] for it in items)
         assert priorities == [1, 2, 3, 4, 5]
 
     def test_every_item_carries_rule_generation_and_server_derived_source(self):
         resp = client.post("/api/v1/recommendations", json=BASE_PAYLOAD)
-        items = resp.json()
+        items = _items(resp)
         for it in items:
             # G-07 服务端派生
             assert it["source_type"] == SourceType.AI_RECOMMENDED.value
@@ -129,7 +137,7 @@ class TestDifferentiatedTop1:
         }
         resp = client.post("/api/v1/recommendations", json=payload)
         assert resp.status_code == 200, resp.text
-        top1 = _top_food_code(resp.json())
+        top1 = _top_food_code(_items(resp))
         # 早餐不可能首推麻辣烫
         assert top1 != "malatang"
 
@@ -144,7 +152,7 @@ class TestDifferentiatedTop1:
             },
         }
         top_a = _top_food_code(
-            client.post("/api/v1/recommendations", json=payload_a).json()
+            _items(client.post("/api/v1/recommendations", json=payload_a))
         )
 
         payload_b = {
@@ -159,7 +167,7 @@ class TestDifferentiatedTop1:
         }
         resp_b = client.post("/api/v1/recommendations", json=payload_b)
         assert resp_b.status_code == 200, resp_b.text
-        items_b = resp_b.json()
+        items_b = _items(resp_b)
         top_b = _top_food_code(items_b)
 
         # MEM-024：链路 B 首菜应和链路 A 不同
@@ -175,7 +183,7 @@ class TestDifferentiatedTop1:
         """链路 C：晚餐 / 严格素食 / 30 以上 / 清淡 + 没啥胃口"""
         # 先拿 A/B 首菜当基准
         top_a = _top_food_code(
-            client.post(
+            _items(client.post(
                 "/api/v1/recommendations",
                 json={
                     **BASE_PAYLOAD,
@@ -185,10 +193,10 @@ class TestDifferentiatedTop1:
                         QID["BUDG"]: ["under_20"],
                     },
                 },
-            ).json()
+            ))
         )
         top_b = _top_food_code(
-            client.post(
+            _items(client.post(
                 "/api/v1/recommendations",
                 json={
                     **BASE_PAYLOAD,
@@ -200,7 +208,7 @@ class TestDifferentiatedTop1:
                         QID["APP"]: ["hungry"],
                     },
                 },
-            ).json()
+            ))
         )
 
         payload_c = {
@@ -216,7 +224,7 @@ class TestDifferentiatedTop1:
         }
         resp_c = client.post("/api/v1/recommendations", json=payload_c)
         assert resp_c.status_code == 200, resp_c.text
-        top_c = _top_food_code(resp_c.json())
+        top_c = _top_food_code(_items(resp_c))
 
         assert top_c != top_a, f"MEM-024：链路 C 首菜={top_c} 与链路 A 相同"
         assert top_c != top_b, f"MEM-024：链路 C 首菜={top_c} 与链路 B 相同"

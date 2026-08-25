@@ -5,14 +5,31 @@
     "display_name_zh": "小碗菜",
     "display_name_en": "Small Bowl Dishes",
     "emoji": "🍚",
-    "cuisine_groups": ["chinese_staple"],
-    "meal_times": ["midday", "evening", "anytime"],
-    "satiety_tags": ["regular_meal", "light_meal"],
-    "taste_tags": ["any", "light", "salty", "spicy"],
+    "cuisine_groups": [
+      "chinese_staple"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "anytime"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "light_meal"
+    ],
+    "taste_tags": [
+      "any",
+      "light",
+      "salty",
+      "spicy"
+    ],
     "common_avoidance_tags": [],
     "medical_allergen_tags": [],
     "medical_safety_note_zh": null,
-    "supported_budget_tiers": ["under_20", "from_20_to_30"],
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -25,14 +42,35 @@
     "display_name_zh": "牛肉面",
     "display_name_en": "Beef Noodles",
     "emoji": "🍜",
-    "cuisine_groups": ["noodle", "chinese_staple"],
-    "meal_times": ["midday", "evening", "late_night"],
-    "satiety_tags": ["regular_meal"],
-    "taste_tags": ["salty", "spicy", "light"],
-    "common_avoidance_tags": ["meat"],
-    "medical_allergen_tags": ["gluten", "soy"],
+    "cuisine_groups": [
+      "noodle",
+      "chinese_staple"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "spicy",
+      "light"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy"
+    ],
     "medical_safety_note_zh": "通常含面条（麸质）和酱油（大豆）；具体门店存在差异，不提供医学保证。",
-    "supported_budget_tiers": ["under_20", "from_20_to_30"],
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -45,14 +83,31 @@
     "display_name_zh": "黄焖鸡",
     "display_name_en": "Braised Chicken Rice",
     "emoji": "🍗",
-    "cuisine_groups": ["chinese_staple"],
-    "meal_times": ["midday", "evening"],
-    "satiety_tags": ["regular_meal"],
-    "taste_tags": ["salty", "spicy"],
-    "common_avoidance_tags": ["meat"],
-    "medical_allergen_tags": ["soy"],
+    "cuisine_groups": [
+      "chinese_staple"
+    ],
+    "meal_times": [
+      "midday",
+      "evening"
+    ],
+    "satiety_tags": [
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "spicy"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "soy"
+    ],
     "medical_safety_note_zh": "通常含酱油（大豆）和其他调味料；具体门店存在差异，不提供医学保证。",
-    "supported_budget_tiers": ["under_20", "from_20_to_30"],
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -65,14 +120,32 @@
     "display_name_zh": "砂锅米线",
     "display_name_en": "Casserole Rice Noodles",
     "emoji": "🥘",
-    "cuisine_groups": ["noodle", "hotpot"],
-    "meal_times": ["midday", "evening", "late_night"],
-    "satiety_tags": ["regular_meal"],
-    "taste_tags": ["any", "spicy", "sour"],
+    "cuisine_groups": [
+      "noodle",
+      "hotpot"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "any",
+      "spicy",
+      "sour"
+    ],
     "common_avoidance_tags": [],
-    "medical_allergen_tags": ["soy"],
+    "medical_allergen_tags": [
+      "soy"
+    ],
     "medical_safety_note_zh": "汤底通常含酱油（大豆）等调味料；具体门店存在差异，不提供医学保证。",
-    "supported_budget_tiers": ["under_20", "from_20_to_30"],
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -85,14 +158,29 @@
     "display_name_zh": "轻食饭碗",
     "display_name_en": "Salad Rice Bowl",
     "emoji": "🥗",
-    "cuisine_groups": ["salad", "chinese_staple"],
-    "meal_times": ["midday", "evening", "anytime"],
-    "satiety_tags": ["light_meal", "regular_meal"],
-    "taste_tags": ["light"],
+    "cuisine_groups": [
+      "salad",
+      "chinese_staple"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "anytime"
+    ],
+    "satiety_tags": [
+      "light_meal",
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "light"
+    ],
     "common_avoidance_tags": [],
     "medical_allergen_tags": [],
     "medical_safety_note_zh": null,
-    "supported_budget_tiers": ["from_20_to_30", "over_30"],
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
     "budget_fit_status": "uncertain",
     "budget_fit_source": "内部常识 v1.0（轻食价格波动较大）",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -105,14 +193,36 @@
     "display_name_zh": "麻辣烫",
     "display_name_en": "Spicy Hot Pot",
     "emoji": "🍲",
-    "cuisine_groups": ["hotpot", "noodle"],
-    "meal_times": ["midday", "evening", "late_night"],
-    "satiety_tags": ["regular_meal", "heavy_meal"],
-    "taste_tags": ["spicy", "sour", "any"],
-    "common_avoidance_tags": ["seafood"],
-    "medical_allergen_tags": ["soy", "shellfish"],
+    "cuisine_groups": [
+      "hotpot",
+      "noodle"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "heavy_meal"
+    ],
+    "taste_tags": [
+      "spicy",
+      "sour",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "seafood"
+    ],
+    "medical_allergen_tags": [
+      "soy",
+      "shellfish"
+    ],
     "medical_safety_note_zh": "汤底可能含海鲜贝类原料，部分门店提供麻辣拌变体；不提供医学过敏保证。",
-    "supported_budget_tiers": ["under_20", "from_20_to_30"],
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -125,14 +235,38 @@
     "display_name_zh": "汉堡",
     "display_name_en": "Burger",
     "emoji": "🍔",
-    "cuisine_groups": ["fast_food"],
-    "meal_times": ["midday", "evening", "anytime"],
-    "satiety_tags": ["regular_meal", "heavy_meal"],
-    "taste_tags": ["any", "salty", "sweet"],
-    "common_avoidance_tags": ["meat"],
-    "medical_allergen_tags": ["gluten", "dairy", "egg", "soy"],
+    "cuisine_groups": [
+      "western",
+      "fast_food"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "anytime"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "heavy_meal"
+    ],
+    "taste_tags": [
+      "any",
+      "salty",
+      "sweet"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "dairy",
+      "egg",
+      "soy"
+    ],
     "medical_safety_note_zh": "通常含面包（麸质）、芝士（乳制品）、沙拉酱（鸡蛋/大豆）；具体门店差异较大，不提供医学保证。",
-    "supported_budget_tiers": ["from_20_to_30", "over_30"],
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -145,14 +279,29 @@
     "display_name_zh": "轻食沙拉",
     "display_name_en": "Salad",
     "emoji": "🥗",
-    "cuisine_groups": ["salad"],
-    "meal_times": ["midday", "evening", "tea_time"],
-    "satiety_tags": ["light_meal"],
-    "taste_tags": ["light"],
-    "common_avoidance_tags": ["seafood"],
+    "cuisine_groups": [
+      "salad"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "tea_time"
+    ],
+    "satiety_tags": [
+      "light_meal"
+    ],
+    "taste_tags": [
+      "light"
+    ],
+    "common_avoidance_tags": [
+      "seafood"
+    ],
     "medical_allergen_tags": [],
     "medical_safety_note_zh": "含海鲜/蛋类配料的沙拉需自行确认；这里只标记通用标签，不提供医学保证。",
-    "supported_budget_tiers": ["from_20_to_30", "over_30"],
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
     "budget_fit_status": "uncertain",
     "budget_fit_source": "内部常识 v1.0（轻食价格波动较大）",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -165,14 +314,38 @@
     "display_name_zh": "烧烤",
     "display_name_en": "BBQ / Chuanr",
     "emoji": "🍢",
-    "cuisine_groups": ["grill", "asian"],
-    "meal_times": ["evening", "late_night"],
-    "satiety_tags": ["regular_meal", "heavy_meal", "finger_food"],
-    "taste_tags": ["spicy", "salty", "any"],
-    "common_avoidance_tags": ["seafood", "meat"],
-    "medical_allergen_tags": ["soy", "shellfish", "peanut"],
+    "cuisine_groups": [
+      "grill",
+      "asian"
+    ],
+    "meal_times": [
+      "evening",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "heavy_meal",
+      "finger_food"
+    ],
+    "taste_tags": [
+      "spicy",
+      "salty",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "seafood",
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "soy",
+      "shellfish",
+      "peanut"
+    ],
     "medical_safety_note_zh": "常见含海鲜/花生配料；具体品种由门店决定，不提供医学保证。",
-    "supported_budget_tiers": ["from_20_to_30", "over_30"],
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
     "budget_fit_status": "uncertain",
     "budget_fit_source": "内部常识 v1.0（烧烤价差极大）",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -185,14 +358,39 @@
     "display_name_zh": "炸鸡",
     "display_name_en": "Fried Chicken",
     "emoji": "🍗",
-    "cuisine_groups": ["fast_food"],
-    "meal_times": ["midday", "evening", "tea_time", "late_night"],
-    "satiety_tags": ["regular_meal", "heavy_meal", "finger_food"],
-    "taste_tags": ["salty", "spicy", "any"],
-    "common_avoidance_tags": ["meat"],
-    "medical_allergen_tags": ["egg", "soy", "dairy", "gluten"],
+    "cuisine_groups": [
+      "fast_food"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "tea_time",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "heavy_meal",
+      "finger_food"
+    ],
+    "taste_tags": [
+      "salty",
+      "spicy",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "egg",
+      "soy",
+      "dairy",
+      "gluten"
+    ],
     "medical_safety_note_zh": "裹粉通常含面粉/鸡蛋，调味含大豆等；具体门店差异大，不提供医学保证。",
-    "supported_budget_tiers": ["from_20_to_30", "over_30"],
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0（连锁品牌单人套餐可预期）",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -205,14 +403,36 @@
     "display_name_zh": "饺子",
     "display_name_en": "Dumplings",
     "emoji": "🥟",
-    "cuisine_groups": ["chinese_staple", "asian"],
-    "meal_times": ["midday", "evening", "morning"],
-    "satiety_tags": ["regular_meal", "light_meal"],
-    "taste_tags": ["salty", "any"],
-    "common_avoidance_tags": ["meat", "seafood"],
-    "medical_allergen_tags": ["gluten", "soy"],
+    "cuisine_groups": [
+      "chinese_staple",
+      "asian"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "morning"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "light_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "meat",
+      "seafood"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy"
+    ],
     "medical_safety_note_zh": "面皮（麸质）+ 蘸料（大豆）；馅料由门店决定，不提供医学保证。",
-    "supported_budget_tiers": ["under_20", "from_20_to_30"],
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -225,14 +445,36 @@
     "display_name_zh": "寿司",
     "display_name_en": "Sushi",
     "emoji": "🍣",
-    "cuisine_groups": ["asian", "salad"],
-    "meal_times": ["midday", "evening"],
-    "satiety_tags": ["light_meal", "regular_meal"],
-    "taste_tags": ["salty", "sweet"],
-    "common_avoidance_tags": ["seafood", "meat"],
-    "medical_allergen_tags": ["soy", "gluten", "shellfish"],
+    "cuisine_groups": [
+      "japanese",
+      "asian",
+      "salad"
+    ],
+    "meal_times": [
+      "midday",
+      "evening"
+    ],
+    "satiety_tags": [
+      "light_meal",
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "sweet"
+    ],
+    "common_avoidance_tags": [
+      "seafood",
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "soy",
+      "gluten",
+      "shellfish"
+    ],
     "medical_safety_note_zh": "通常含海鲜；酱油/芥末和醋饭（麸质/大豆）；不提供医学保证。",
-    "supported_budget_tiers": ["over_30"],
+    "supported_budget_tiers": [
+      "over_30"
+    ],
     "budget_fit_status": "unlikely",
     "budget_fit_source": "内部常识 v1.0（寿司普遍偏贵，单人正餐难在 20 内）",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -245,14 +487,33 @@
     "display_name_zh": "粥",
     "display_name_en": "Rice Congee",
     "emoji": "🍵",
-    "cuisine_groups": ["chinese_staple"],
-    "meal_times": ["morning", "midday", "evening", "late_night"],
-    "satiety_tags": ["light_meal"],
-    "taste_tags": ["light", "salty", "sweet"],
-    "common_avoidance_tags": ["seafood", "meat"],
+    "cuisine_groups": [
+      "chinese_staple"
+    ],
+    "meal_times": [
+      "morning",
+      "midday",
+      "evening",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "light_meal"
+    ],
+    "taste_tags": [
+      "light",
+      "salty",
+      "sweet"
+    ],
+    "common_avoidance_tags": [
+      "seafood",
+      "meat"
+    ],
     "medical_allergen_tags": [],
     "medical_safety_note_zh": null,
-    "supported_budget_tiers": ["under_20", "from_20_to_30"],
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -265,14 +526,38 @@
     "display_name_zh": "三明治",
     "display_name_en": "Sandwich",
     "emoji": "🥪",
-    "cuisine_groups": ["bakery", "fast_food"],
-    "meal_times": ["morning", "midday", "tea_time"],
-    "satiety_tags": ["light_meal", "regular_meal"],
-    "taste_tags": ["salty", "any", "sweet"],
-    "common_avoidance_tags": ["meat"],
-    "medical_allergen_tags": ["gluten", "dairy", "egg"],
+    "cuisine_groups": [
+      "western",
+      "bakery",
+      "fast_food"
+    ],
+    "meal_times": [
+      "morning",
+      "midday",
+      "tea_time"
+    ],
+    "satiety_tags": [
+      "light_meal",
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "any",
+      "sweet"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "dairy",
+      "egg"
+    ],
     "medical_safety_note_zh": "面包（麸质）、常见含芝士/火腿/酱料（乳制品/鸡蛋）；不提供医学保证。",
-    "supported_budget_tiers": ["under_20", "from_20_to_30"],
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
     "budget_fit_status": "fits",
     "budget_fit_source": "内部常识 v1.0",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
@@ -285,17 +570,464 @@
     "display_name_zh": "披萨",
     "display_name_en": "Pizza",
     "emoji": "🍕",
-    "cuisine_groups": ["fast_food"],
-    "meal_times": ["midday", "evening", "tea_time"],
-    "satiety_tags": ["regular_meal", "heavy_meal"],
-    "taste_tags": ["salty", "sweet", "any"],
-    "common_avoidance_tags": ["meat", "seafood"],
-    "medical_allergen_tags": ["gluten", "dairy"],
+    "cuisine_groups": [
+      "western",
+      "fast_food"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "tea_time"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "heavy_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "sweet",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "meat",
+      "seafood"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "dairy"
+    ],
     "medical_safety_note_zh": "饼底（麸质）+ 芝士（乳制品）；具体配料由门店决定，不提供医学保证。",
-    "supported_budget_tiers": ["from_20_to_30", "over_30"],
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
     "budget_fit_status": "uncertain",
     "budget_fit_source": "内部常识 v1.0（单人份/单点价差大）",
     "budget_fit_updated_at": "2026-08-04T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "ramen",
+    "display_name_zh": "日式拉面",
+    "display_name_en": "Japanese Ramen",
+    "emoji": "🍜",
+    "cuisine_groups": [
+      "japanese",
+      "asian",
+      "noodle"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "heavy_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "spicy",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "meat",
+      "seafood"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy",
+      "egg"
+    ],
+    "medical_safety_note_zh": "面条含麸质；汤底含大豆/肉；叉烧/溏心蛋含蛋；不提供医学保证。",
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
+    "budget_fit_status": "fits",
+    "budget_fit_source": "内部常识 v1.0",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "donburi",
+    "display_name_zh": "日式盖饭（牛丼/亲子丼）",
+    "display_name_en": "Japanese Donburi",
+    "emoji": "🍛",
+    "cuisine_groups": [
+      "japanese",
+      "asian"
+    ],
+    "meal_times": [
+      "midday",
+      "evening"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "heavy_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "sweet"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "soy",
+      "egg",
+      "gluten"
+    ],
+    "medical_safety_note_zh": "常用酱料含大豆；亲子丼含蛋；不提供医学保证。",
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
+    "budget_fit_status": "fits",
+    "budget_fit_source": "内部常识 v1.0",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "udon_soba",
+    "display_name_zh": "乌冬/荞麦面",
+    "display_name_en": "Udon / Soba",
+    "emoji": "🍥",
+    "cuisine_groups": [
+      "japanese",
+      "asian",
+      "noodle"
+    ],
+    "meal_times": [
+      "midday",
+      "evening"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "light_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "any",
+      "light"
+    ],
+    "common_avoidance_tags": [
+      "meat",
+      "seafood"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy",
+      "buckwheat"
+    ],
+    "medical_safety_note_zh": "乌冬为小麦（麸质）；荞麦含荞麦过敏原；天妇罗配料含海鲜/大豆；不提供医学保证。",
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
+    "budget_fit_status": "fits",
+    "budget_fit_source": "内部常识 v1.0",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "tempura",
+    "display_name_zh": "天妇罗定食",
+    "display_name_en": "Tempura Teishoku",
+    "emoji": "🍤",
+    "cuisine_groups": [
+      "japanese",
+      "asian"
+    ],
+    "meal_times": [
+      "midday",
+      "evening"
+    ],
+    "satiety_tags": [
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "seafood"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy",
+      "shellfish",
+      "egg"
+    ],
+    "medical_safety_note_zh": "面糊含麸质、蛋液；酱油含大豆；虾/贝类海鲜；不提供医学保证。",
+    "supported_budget_tiers": [
+      "over_30"
+    ],
+    "budget_fit_status": "unlikely",
+    "budget_fit_source": "内部常识 v1.0（天妇罗定食普遍偏贵）",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "japanese_curry",
+    "display_name_zh": "日式咖喱饭",
+    "display_name_en": "Japanese Curry Rice",
+    "emoji": "🍚",
+    "cuisine_groups": [
+      "japanese",
+      "asian"
+    ],
+    "meal_times": [
+      "midday",
+      "evening"
+    ],
+    "satiety_tags": [
+      "regular_meal",
+      "heavy_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "spicy",
+      "sweet"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy"
+    ],
+    "medical_safety_note_zh": "咖喱 roux 含麸质/小麦；酱料含大豆；常配猪肉/鸡肉；不提供医学保证。",
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
+    "budget_fit_status": "fits",
+    "budget_fit_source": "内部常识 v1.0",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "bibimbap",
+    "display_name_zh": "韩式拌饭",
+    "display_name_en": "Bibimbap",
+    "emoji": "🥗",
+    "cuisine_groups": [
+      "korean",
+      "asian"
+    ],
+    "meal_times": [
+      "midday",
+      "evening"
+    ],
+    "satiety_tags": [
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "spicy",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy",
+      "egg"
+    ],
+    "medical_safety_note_zh": "辣酱含大豆/小麦；可选牛肉/鸡蛋；不提供医学保证。",
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
+    "budget_fit_status": "fits",
+    "budget_fit_source": "内部常识 v1.0",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "korean_bbq",
+    "display_name_zh": "韩式烤肉",
+    "display_name_en": "Korean BBQ",
+    "emoji": "🥩",
+    "cuisine_groups": [
+      "korean",
+      "asian",
+      "grill"
+    ],
+    "meal_times": [
+      "evening",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "heavy_meal",
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "spicy",
+      "garlic"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "soy",
+      "garlic"
+    ],
+    "medical_safety_note_zh": "酱料含大豆/大蒜；纯肉类；不提供医学保证。",
+    "supported_budget_tiers": [
+      "over_30"
+    ],
+    "budget_fit_status": "unlikely",
+    "budget_fit_source": "内部常识 v1.0（韩式烤肉普遍人均 >30）",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "tteokbokki",
+    "display_name_zh": "韩式辣炒年糕",
+    "display_name_en": "Tteokbokki",
+    "emoji": "🌶️",
+    "cuisine_groups": [
+      "korean",
+      "asian",
+      "noodle"
+    ],
+    "meal_times": [
+      "midday",
+      "evening",
+      "late_night"
+    ],
+    "satiety_tags": [
+      "light_meal",
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "spicy",
+      "sweet",
+      "salty"
+    ],
+    "common_avoidance_tags": [],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy",
+      "egg"
+    ],
+    "medical_safety_note_zh": "年糕裹酱料含小麦/大豆；鱼饼含麸质/蛋；不提供医学保证。",
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
+    "budget_fit_status": "fits",
+    "budget_fit_source": "内部常识 v1.0",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "korean_stew",
+    "display_name_zh": "韩式汤饭/部队锅",
+    "display_name_en": "Korean Stew (Budae Jjigae / Kimchi Jjigae)",
+    "emoji": "🍲",
+    "cuisine_groups": [
+      "korean",
+      "asian",
+      "hotpot"
+    ],
+    "meal_times": [
+      "evening",
+      "late_night",
+      "midday"
+    ],
+    "satiety_tags": [
+      "heavy_meal",
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "spicy",
+      "salty",
+      "sour"
+    ],
+    "common_avoidance_tags": [
+      "meat",
+      "seafood"
+    ],
+    "medical_allergen_tags": [
+      "gluten",
+      "soy",
+      "pork",
+      "sausage"
+    ],
+    "medical_safety_note_zh": "部队锅含午餐肉/香肠/火腿；汤底/泡菜含大豆/辣椒；不提供医学保证。",
+    "supported_budget_tiers": [
+      "from_20_to_30",
+      "over_30"
+    ],
+    "budget_fit_status": "fits",
+    "budget_fit_source": "内部常识 v1.0",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
+    "is_enabled": true,
+    "priority_boost": 0
+  },
+  {
+    "dictionary_version": "v1.0",
+    "food_code": "kimbap",
+    "display_name_zh": "韩式紫菜包饭",
+    "display_name_en": "Kimbap",
+    "emoji": "🍙",
+    "cuisine_groups": [
+      "korean",
+      "asian"
+    ],
+    "meal_times": [
+      "morning",
+      "midday",
+      "evening"
+    ],
+    "satiety_tags": [
+      "light_meal",
+      "regular_meal"
+    ],
+    "taste_tags": [
+      "salty",
+      "any"
+    ],
+    "common_avoidance_tags": [
+      "meat"
+    ],
+    "medical_allergen_tags": [
+      "soy",
+      "gluten",
+      "egg",
+      "sesame"
+    ],
+    "medical_safety_note_zh": "紫菜+白饭；香油含芝麻；腌萝卜/牛蒡含大豆；胡萝卜鸡蛋馅含蛋；不提供医学保证。",
+    "supported_budget_tiers": [
+      "under_20",
+      "from_20_to_30"
+    ],
+    "budget_fit_status": "fits",
+    "budget_fit_source": "内部常识 v1.0",
+    "budget_fit_updated_at": "2026-08-14T00:00:00Z",
     "is_enabled": true,
     "priority_boost": 0
   }

@@ -1,12 +1,22 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 
 import * as apiClient from '../services/api/client';
 import type {
   QuestionnaireNextRequestV1,
   QuestionnaireRecomputeResult,
 } from '../services/api/types';
+import { AuthProvider } from '../context/AuthContext';
 import Recommend from '../pages/Recommend';
+
+function renderInContext(ui: React.ReactElement) {
+  return render(
+    <MemoryRouter initialEntries={['/recommend']}>
+      <AuthProvider>{ui}</AuthProvider>
+    </MemoryRouter>,
+  );
+}
 
 const BASE_RESULT: QuestionnaireRecomputeResult = {
   questionnaire_version: 'v1.0',
@@ -88,7 +98,7 @@ describe('/recommend 问卷页（P2-03B 前端接入 questionnaireNext）', () =
         next_question_ids: ['q01_meal_period', 'q02_explicit_food'],
       });
 
-    render(<Recommend />);
+    renderInContext(<Recommend />);
     await waitFor(() => expect(nextSpy).toHaveBeenCalledTimes(1));
 
     expect(screen.getByText('现在想吃哪顿饭？')).toBeInTheDocument();
@@ -128,7 +138,7 @@ describe('/recommend 问卷页（P2-03B 前端接入 questionnaireNext）', () =
       required_not_yet_answered_question_ids: ['q02_explicit_food', 'q03_budget'],
     } satisfies QuestionnaireRecomputeResult);
 
-    render(<Recommend />);
+    renderInContext(<Recommend />);
     // 等待首调响应落库 → setResult + invalidated 分支 setAnswers 删除 q06_appetite
     await waitFor(
       () => {
@@ -159,7 +169,7 @@ describe('/recommend 问卷页（P2-03B 前端接入 questionnaireNext）', () =
       covered_dimensions: BASE_RESULT.covered_dimensions.map((d) => ({ ...d, covered: true })),
     } satisfies QuestionnaireRecomputeResult);
 
-    render(<Recommend />);
+    renderInContext(<Recommend />);
     await waitFor(() =>
       expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '100'),
     );

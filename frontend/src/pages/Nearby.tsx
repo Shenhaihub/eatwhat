@@ -20,6 +20,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useSearchParams } from 'react-router';
 
 import { api, ApiError } from '../services/api/client';
 import type {
@@ -30,6 +31,7 @@ import type {
   RestaurantSearchResponseV1,
 } from '../services/api/types';
 import '../styles/nearby.css';
+import { track } from '../lib/track';
 
 type EntryMode = 'browser' | 'manual' | 'demo';
 
@@ -193,12 +195,17 @@ function MerchantCard({ item, isPrimary, hidden }: MerchantCardProps) {
 }
 
 export default function Nearby() {
+  const [searchParams] = useSearchParams();
   const initial = loadStoredLocation();
+  // URL ?food_code=xxx 优先于 localStorage 里上次保存的 foodCode
+  const urlFoodCode = searchParams.get('food_code') ?? '';
   const [selectedInfo, setSelectedInfo] = useState<StoredLocationInfo | null>(initial.info);
   const [distance, setDistance] = useState<number>(initial.distance);
-  const [foodCode, setFoodCode] = useState<string>(initial.foodCode);
+  const [foodCode, setFoodCode] = useState<string>(urlFoodCode || initial.foodCode);
   const [mockMode, setMockMode] = useState<MockMode>(initial.mockMode);
   const [activeMode, setActiveMode] = useState<EntryMode>('browser');
+  // 从推荐/Top榜带 food_code 过来 → 页面自动尝试一次搜索（前提：已有地点）
+  const autoSearchedRef = useRef<string | null>(null);
 
   // ---- 浏览器定位 ----
   const [browserState, setBrowserState] = useState<LoadState>({ loading: false, error: null });
@@ -398,6 +405,29 @@ export default function Nearby() {
     },
     [selectedInfo, foodCode, distance, mockMode],
   );
+
+  // ---- 从推荐/Top 榜跳过来时，URL 上带着 food_code：
+  //   - 如果已经保存过地点，自动搜一次
+  //   - 否则等用户选完地点后再自动触发一次
+  // 注意："手动在输入框里敲 food_code" 不自动搜，避免和用户点击「搜索商家」按钮的测试/交互冲突。
+  useEffect(() => {
+    const fc = urlFoodCode.trim() || foodCode.trim(); // 仅当 urlFoodCode 或 foodCode 由其他地方（非输入）改变才触发时有限制，下面用"is set from url"判据
+    if (!fc) return;
+    if (!selectedInfo) return;
+    // 只有当 foodCode === urlFoodCode（即当前显示的 food 来自 URL），才允许自动搜
+    if (foodCode.trim() !== urlFoodCode.trim()) return;
+    const key = `${fc}|${selectedInfo.location_token}`;
+    if (autoSearchedRef.current === key) return;
+    autoSearchedRef.current = key;
+    // C：URL food_code → 预填 + 自动搜 成功一次打一个 applied，
+    // 方便算「社区/推荐页点"去吃"→ Nearby 自动搜 成功」的漏斗转化率
+    track('nearby.url_foodcode_applied', {
+      food_code: fc,
+      location_token: selectedInfo.location_token,
+      distance_km: distance,
+    });
+    void handleSearchMerchants();
+  }, [selectedInfo, foodCode, urlFoodCode, handleSearchMerchants, distance]);
 
   const handleResetLocation = useCallback(() => {
     setSelectedInfo(null);

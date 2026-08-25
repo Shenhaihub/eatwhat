@@ -29,6 +29,8 @@ MAPPABLE_DIMENSION_FIELDS: tuple[str, ...] = (
     "budget",
     "explicit_food_preference",
     "max_distance_m",
+    # P1 修复：菜系偏好（新增 q07_cuisine_preference 题）
+    "cuisine_preferences",
 )
 
 
@@ -62,6 +64,7 @@ class DimensionMapping(BaseModel):
         "budget",
         "explicit_food_preference",
         "max_distance_m",
+        "cuisine_preferences",
     ]
     is_array: bool = False
     # 所有 Q 的 value 都是枚举的 .value 字面量（例如 "lunch" 对应 MealPeriod.LUNCH）

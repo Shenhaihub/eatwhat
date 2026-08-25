@@ -48,8 +48,11 @@ export {
   DICTIONARY_VERSION_PATTERN,
   QUESTIONNAIRE_VERSION_PATTERN,
   RECOMMENDATIONS_SUPPORTED_ENTRY_INTENTS,
+  type AiQuotaInfo,
   type FollowUpOptionV1,
   type FollowUpQuestionV1,
+  type MergedPrefField,
+  type MergedPrefFieldKind,
   type RecommendationsGenerateRequestV1,
   type RecommendationsGenerateResponseV1,
   type SessionAnswerRequestV1,
@@ -84,3 +87,36 @@ export {
   type HistoryRecord,
   type HistoryWriteRequest,
 } from './history';
+export {
+  type PreferenceDeleteAllResponse,
+  type PreferenceListResponse,
+  type PreferenceSnapshot,
+  type PreferenceWriteRequest,
+} from './preferences';
+export {
+  type AiStatsRecordLite,
+  type StageBreakdownEntry,
+  type StatsWindow,
+  type SystemAiStatsResponse,
+} from './system';
+export {
+  type CommunityFeedAuthor,
+  type CommunityFeedItem,
+  type CommunityFeedListResponse,
+  type CommunityFeedSort,
+  type CommunityLikeResponse,
+  type CommunityThemeOption,
+  type CommunityThemeResponse,
+  type CommunityThemeVoteRequest,
+  type CommunityThemeVoteResponse,
+  type CommunityTrendingItem,
+  type CommunityTrendingResponse,
+} from './community';
+export {
+  type FeedbackSubmitRequest,
+  type FeedbackSubmitResponse,
+  type FeedbackType,
+  type FeedbackTypeOption,
+  type ReportRequest,
+  type ReportResponse,
+} from './feedback';

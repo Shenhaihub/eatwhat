@@ -12,12 +12,58 @@ import { useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 
+function _readCookie(name: string): string | null {
+  try {
+    const pairs = document.cookie.split(';');
+    for (const p of pairs) {
+      const [k, ...rest] = p.split('=');
+      if (k.trim() === name) {
+        const raw = rest.join('=');
+        return decodeURIComponent(raw);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function _popAuthReturnTo(): string {
+  let v: string | null = null;
+  try {
+    v = localStorage.getItem('auth_return_to_v1');
+    if (v) localStorage.removeItem('auth_return_to_v1');
+  } catch {
+    v = null;
+  }
+  if (!v || !v.startsWith('/')) {
+    v = _readCookie('auth_return_to') ?? null;
+    if (v && !v.startsWith('/')) v = null;
+    // 清 cookie（让后端 Set-Cookie 的 max-age 自己过期也行，但主动清掉避免残留）
+    try {
+      document.cookie =
+        'auth_return_to=; path=/; max-age=0; SameSite=Lax';
+    } catch {
+      /* ignore */
+    }
+  }
+  return v && v.startsWith('/') ? v : '/';
+}
+
 export default function AuthCallback() {
   const { isAuthenticated, loading, accessToken } = useAuth();
   const [params] = useSearchParams();
   const nav = useNavigate();
 
-  const next = params.get('next') ?? '/';
+  // next 优先级：localStorage auth_return_to_v1 > cookie auth_return_to > URL query next > "/"
+  // （URL query 放在最后是因为现在 Supabase 回调不再带 next，保留仅用于老链接兼容）
+  const nextFromUrl = params.get('next') ?? null;
+  const nextFromStorage = _popAuthReturnTo();
+  const next = (nextFromStorage && nextFromStorage.startsWith('/')
+    ? nextFromStorage
+    : nextFromUrl && nextFromUrl.startsWith('/')
+      ? nextFromUrl
+      : '/') || '/';
   const mode = params.get('mode') ?? 'auto';
 
   useEffect(() => {

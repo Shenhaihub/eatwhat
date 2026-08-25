@@ -116,6 +116,30 @@
         "operand_value": ["lunch", "dinner", "midnight_snack"]
       },
       "required_for_entry_intents": []
+    },
+    {
+      "question_id": "q07_cuisine_preference",
+      "title_zh": "有想吃的菜系吗？（可多选，不选=都可以）",
+      "question_type": "multi_choice",
+      "options": [
+        {"option_id": "japanese", "label_zh": "日料/日式", "value": "japanese"},
+        {"option_id": "korean", "label_zh": "韩餐/韩式", "value": "korean"},
+        {"option_id": "western", "label_zh": "西餐（汉堡/披萨/三明治等）", "value": "western"},
+        {"option_id": "chinese_staple", "label_zh": "中餐家常（小碗菜/饺子/粥等）", "value": "chinese_staple"},
+        {"option_id": "noodle", "label_zh": "面食/粉面", "value": "noodle"},
+        {"option_id": "hotpot", "label_zh": "火锅/麻辣烫/砂锅", "value": "hotpot"}
+      ],
+      "maps_to": {
+        "field_name": "cuisine_preferences",
+        "is_array": true,
+        "value_is_enum_value": true
+      },
+      "display_if": {
+        "operator": "equals",
+        "operand_question_id": "q02_explicit_food",
+        "operand_value": "undecided"
+      },
+      "required_for_entry_intents": []
     }
   ]
 }

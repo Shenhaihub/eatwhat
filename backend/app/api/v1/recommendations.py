@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.exceptions import RequestValidationError
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 from app.api.v1.auth import CurrentUser, get_current_user_optional
 from app.api.v1.history import HistoryWriteRequest, write_user_recommendation
+from app.api.v1.preferences import PreferenceWriteRequest, write_user_preference_snapshot
 from app.core.config import Settings, get_settings
 from app.core.exceptions import BAD_REQUEST, CONFLICT, INTERNAL_ERROR, NOT_FOUND, AppError
 from app.core.supabase_client import SupabaseAdminClient, get_supabase_admin
@@ -68,6 +69,15 @@ class RecommendationsGenerateRequestV1(BaseModel):
         pattern=_DICT_VERSION_PATTERN,
         description="不传 = 食物字典默认版本（当前 v1.0）",
     )
+    prefer_ai_gain: bool = Field(
+        default=False,
+        description=(
+            "用户是否希望使用 AI 优化推荐（G-07：这是「用户偏好指示」，"
+            "最终 generation_mode 由后端派生，客户端不直接指定）。"
+            "True：已登录 → 走 AI 增益链路（每天 3 次额度）；未登录 → 401。"
+            "False（默认）→ 走免费的确定性规则引擎，不扣额度，不要求登录。"
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_answers_shapes(self) -> RecommendationsGenerateRequestV1:
@@ -111,16 +121,37 @@ def _find_source_type_keys(obj: Any, *, path_prefix: str = "body") -> list[str]:
     return hits
 
 
+class DirectRecommendationsResponseV1(BaseModel):
+    """POST /api/v1/recommendations 的响应（P7-07：附加冷启动画像合并明细）。"""
+    model_config = ConfigDict(extra="forbid")
+    # 正好 5 条推荐结果（G-08 兜底保障）
+    items: list[RecommendationItem]
+    # P7-07：冷启动画像合并实际改变的 answers 字段；未登录/无画像命中时为空数组
+    merged_pref_fields: list[dict[str, Any]] = Field(default_factory=list)
+    # P0 修复：自动写入结果（前端据此显示 "已自动保存" / "手动保存" 按钮）
+    autowrite: dict[str, Any] = Field(default_factory=dict)
+    # P5-04A：是否真正走了 AI 增益链路（= final_reason == 'ai_gain'）；
+    # 若 prefer_ai_gain=True 但 final_reason 落入 rule_engine_fallback_*，则 used_ai=False
+    used_ai: bool = False
+    # P5-07：今日 AI 额度使用情况（prefer_ai_gain=False / 未登录 → user_used 为 0）
+    #   {user_used, user_limit(默认 3), global_used, global_limit(默认 100)}
+    ai_quota: dict[str, int] = Field(default_factory=dict)
+    # P5-04A：前端展示给用户看的 final_reason（来源徽章颜色的真源）
+    final_reason: str | None = None
+
+
 # ============== 路由 ==============
 
 
-@router.post("", response_model=list[RecommendationItem])
+@router.post("", response_model=DirectRecommendationsResponseV1)
 async def recommendations_generate(
     request: Request,
     current_user: Annotated[CurrentUser | None, Depends(get_current_user_optional)],
     sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
     settings: Annotated[Settings | None, Depends(get_settings)] = None,
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
+    assert settings is not None  # Depends(get_settings) 保证非空
+
     # 0) 原始 JSON → 先 G-07 再 Pydantic
     try:
         raw_body: Any = await request.json()
@@ -165,6 +196,24 @@ async def recommendations_generate(
             ),
             details={"supported_entry_intents": ["ai_recommend"], "hint": "P3 接入其他入口"},
         )
+
+    # 0b) P5-04：AI 增益登录前置（只有用户主动开启 AI 优化才需要登录；
+    # 默认 prefer_ai_gain=False 不要求登录，和之前行为一致。
+    # G-07：generation_mode='ai' 只有服务端在登录态 + prefer_ai_gain=True 才派生。
+    derived_generation_mode: str = "rule"  # G-07：真源永远在后端派生
+    quota_user_id: str | None = None
+    if payload.prefer_ai_gain:
+        if current_user is None:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=(
+                    "「AI 优化推荐」需要先登录后使用（每天 3 次额度）；"
+                    "未登录可使用免费的确定性规则引擎推荐（默认模式，开关关闭即可）。"
+                ),
+            )
+        derived_generation_mode = "ai"
+        quota_user_id = current_user.user_id
 
     # 1) 加载题库（用于把 qid 映射到七维字段）
     try:
@@ -213,51 +262,85 @@ async def recommendations_generate(
         questionnaire_version=payload.questionnaire_version,
     )
 
-    # 4) 规则引擎确定性生成 5 条（G-08：任何合法输入都返回正好 5）
-    try:
-        items = generate_rule_recommendations(rule_answers, repo=repo)
-    except ValueError as exc:
-        raise AppError(
-            code=INTERNAL_ERROR,
-            status_code=500,
-            message="推荐生成失败，请稍后再试",
-            details={"reason": str(exc)},
-        ) from exc
+    # 3b) P6-02：冷启动画像合并——用最近 3 次偏好快照填充用户未回答的字段（当前答案优先）
+    merged_fields_direct = _try_merge_recent_preferences_into_answers(
+        current_user=current_user,
+        sb=sb,
+        answers=rule_answers,
+    )
 
-    # 5) 返回正好 5 条（response_model=list[RecommendationItem] 会再兜底校验长度/字段）
-    result = [i.model_dump() for i in items]
+    # 4) 派生 generation_mode 对应的生成逻辑
+    mgr = get_recommendation_session_manager(settings)
+    final_reason: str | None = None
 
-    # 6) 登录态下自动入库历史（失败静默不影响返回值；单条日志记 warning）
-    if current_user is not None and sb is not None:
+    if derived_generation_mode == "ai":
+        # AI 模式：创建一次性会话（无 AI 追问题，直接 final generate；因为
+        # 推荐结果页目前是单步生成而非动态追问+单步问答的流程）
+        assert current_user is not None
+        session = mgr.create_session(
+            user_id=current_user.user_id,
+            questionnaire_answers_by_qid=payload.answers_by_question_id,
+            questionnaire_version=payload.questionnaire_version,
+            dictionary_version=dict_version,
+            generation_mode="ai",  # P5：用户明确希望 AI 优化，服务端派生
+            rule_answers=rule_answers,
+        )
+        session.merged_pref_fields = list(merged_fields_direct)
+        # P6-04：把最近 3 条偏好画像 summary 注入 AI system prompt 的先验
+        _hydrate_session_preference_context(
+            session=session, current_user=current_user, sb=sb, limit=3
+        )
+        items = await mgr.try_ai_finalize_recommendation(session=session, repo=repo)
+        final_reason = session.final_reason
+    else:
+        # 默认免费规则模式（prefer_ai_gain=False，或 G-07 强制兜底）
         try:
-            # 从 answers_by_question_id 里尽量提取 food_code
-            food_code = _extract_food_code(payload.answers_by_question_id)
-            # 从 answers 里提取 tags（多选型答案）
-            tags = _extract_tags(payload.answers_by_question_id)
-            snap = {
-                "entry_intent": payload.entry_intent,
-                "questionnaire_version": payload.questionnaire_version,
-                "dictionary_version": dict_version,
-                "items": result,
-            }
-            write_user_recommendation(
-                sb=sb,
-                user=current_user,
-                payload=HistoryWriteRequest(
-                    food_code=food_code,
-                    location=None,
-                    radius_meters=None,
-                    tags=tags,
-                    recommendation_snapshot=snap,
-                    result_count=len(result),
-                    poi_provider=None,
-                ),
-            )
-        except Exception as exc:  # noqa: BLE001 - 不阻塞主流程
-            log = logging.getLogger("app.api.v1.recommendations")
-            log.warning("history_autowrite_failed user=%s err=%r", current_user.user_id, exc)
+            items = generate_rule_recommendations(rule_answers, repo=repo)
+        except ValueError as exc:
+            raise AppError(
+                code=INTERNAL_ERROR,
+                status_code=500,
+                message="推荐生成失败，请稍后再试",
+                details={"reason": str(exc)},
+            ) from exc
+        final_reason = "legacy_rule_engine"
 
-    return result
+    # 5) 返回正好 5 条（P7-07：顶层为对象，含 merged_pref_fields 便于前端 banner 展示）
+    items_dumped = [i.model_dump() for i in items]
+
+    # 6) 登录态下自动入库历史 + 偏好画像（失败不抛，结果放进 autowrite 字段回传前端）
+    autowrite_result = _try_autowrite_history_if_user(
+        current_user=current_user,
+        sb=sb,
+        payload=payload,
+        dict_version=dict_version,
+        items=items,
+        rule_answers=rule_answers,
+        final_reason=final_reason,
+    )
+
+    # 7) P5-07：返回 ai_quota 给前端展示（默认免费模式仍返回一份方便 UI 统一展示"今日额度 3/3"等）
+    chat_service = getattr(mgr, "_chat_service", None)
+    quota_info: dict[str, int]
+    if chat_service is not None and hasattr(chat_service, "peek_quota"):
+        quota_info = chat_service.peek_quota(user_id=quota_user_id)  # type: ignore[attr-defined]
+    else:
+        quota_info = {
+            "user_used": 0,
+            "user_limit": int(getattr(settings, "ai_daily_user_limit", 3) or 3),
+            "global_used": 0,
+            "global_limit": int(getattr(settings, "ai_global_daily_limit", 100) or 100),
+        }
+    used_ai = bool(final_reason == "ai_gain")
+
+    return {
+        "items": items_dumped,
+        "merged_pref_fields": merged_fields_direct,
+        "autowrite": autowrite_result.to_dict(),
+        "used_ai": used_ai,
+        "ai_quota": quota_info,
+        "final_reason": final_reason,
+    }
 
 
 def _extract_food_code(answers_by_question_id: dict[str, list[str]]) -> str | None:
@@ -295,11 +378,10 @@ class SessionAnswerRequestV1(BaseModel):
 
 
 class SessionStateResponseV1(BaseModel):
-    """会话统一响应体（start/get/answer 三路由都返回这个形状）。"""
+    """会话态统一响应（P5-02：follow_up 或 final 二选一）。"""
     model_config = ConfigDict(extra="forbid")
-    session_id: str
+    session_id: str = Field(..., min_length=8, max_length=64)
     stage: str = Field(..., pattern=r"^(follow_up|final)$")
-    # stage=follow_up 时必有 question；final 时可为 null
     question: FollowUpQuestionOutput | None = None
     # 已答轮次进度（方便前端显示进度条 "1/3"）
     rounds_completed: int = Field(..., ge=0, le=3)
@@ -308,6 +390,15 @@ class SessionStateResponseV1(BaseModel):
     candidates: list[RecommendationItem] | None = None
     # 说明 final 是来自 AI 增益还是规则引擎回退（供前端 trace/调试面板）
     final_reason: str | None = None
+    # P7-07：P6-02 冷启动画像合并实际上改变的 answers 字段（仅限 session/start 可能非空）
+    # 空数组 = 本次未合并（未登录/没有画像命中）
+    merged_pref_fields: list[dict[str, Any]] = Field(default_factory=list)
+    # P0 修复：stage=final 时有值，告知前端自动写入情况
+    autowrite: dict[str, Any] = Field(default_factory=dict)
+    # P5-04A：final 阶段实际走了 AI = final_reason == 'ai_gain'
+    used_ai: bool = False
+    # P5-07：今日 AI 额度情况（登录态 + prefer_ai_gain=true 时非空）
+    ai_quota: dict[str, int] = Field(default_factory=dict)
 
 
 # ============== P5-02 复用的校验/加载小工具 ==============
@@ -316,9 +407,11 @@ class SessionStateResponseV1(BaseModel):
 def _validate_and_load_for_session_start(
     *,
     raw_body: Any,
-) -> tuple[RecommendationsGenerateRequestV1, QuestionBankV1, Any]:
+    current_user: CurrentUser | None = None,
+    sb: SupabaseAdminClient | None = None,
+) -> tuple[RecommendationsGenerateRequestV1, QuestionBankV1, Any, list[dict[str, Any]]]:
     """G-07 检查 → Pydantic 校验 → 加载题库 → 翻译 rule_answers。
-    返回 (payload, bank, rule_answers)。任何异常 raise 上层转 AppError。
+    返回 (payload, bank, rule_answers, merged_pref_fields)。任何异常 raise 上层转 AppError。
     """
     source_type_paths = _find_source_type_keys(raw_body)
     if source_type_paths:
@@ -373,7 +466,209 @@ def _validate_and_load_for_session_start(
         answers_by_question_id=payload.answers_by_question_id,
         questionnaire_version=payload.questionnaire_version,
     )
-    return payload, bank, rule_answers
+    # P6-02：冷启动画像合并（用户显式答案优先）
+    merged_pref_fields = _try_merge_recent_preferences_into_answers(
+        current_user=current_user,
+        sb=sb,
+        answers=rule_answers,
+    )
+    return payload, bank, rule_answers, merged_pref_fields
+
+
+def _try_merge_recent_preferences_into_answers(
+    *,
+    current_user: CurrentUser | None,
+    sb: SupabaseAdminClient | None,
+    answers: Any,  # QuestionnaireAnswers duck-type（含 .model_dump / model_copy）
+) -> list[dict[str, Any]]:
+    """P6-02 冷启动画像合并：把最近 3 条偏好快照合并回当前 rule_answers。
+
+    返回合并差异列表（每项 {field, kind, before, after}），用于前端 banner 展示。
+    未合并/失败都返回空列表。
+    """
+    empty: list[dict[str, Any]] = []
+    if current_user is None or sb is None:
+        return empty
+    # 避免无model_dump的对象炸掉
+    if not (hasattr(answers, "model_dump") and hasattr(answers, "model_copy")):
+        return empty
+
+    try:
+        from app.api.v1.preferences import load_recent_preference_snapshots
+
+        snaps = load_recent_preference_snapshots(sb=sb, user_id=current_user.user_id, limit=3)
+    except Exception as exc:  # noqa: BLE001
+        log = logging.getLogger("app.api.v1.recommendations")
+        log.warning("preference_merge_load_fail user=%s err=%r", current_user.user_id, exc)
+        return empty
+    if not snaps:
+        return empty
+
+    logger = logging.getLogger("app.api.v1.recommendations")
+    try:
+        # P7-07：先保存 before 快照用于 diff
+        before = answers.model_dump(mode="python")
+        cur = dict(before)
+        # 从旧→新遍历，越新的覆盖越旧（最终当前答案再覆盖快照）
+        for snap in reversed(snaps):
+            sd = snap.snapshot
+            if not isinstance(sd, dict):
+                continue
+            # 单值字段：仅当前空时填
+            for k in ("meal_period", "appetite", "budget", "explicit_food_preference", "max_distance_m"):
+                if k in sd and cur.get(k) in (None, []):
+                    cur[k] = sd[k]
+            # 列表字段：合并去重
+            for k in ("tastes", "avoidances"):
+                if isinstance(sd.get(k), list):
+                    merged: list[Any] = list(cur.get(k) or [])
+                    for item in sd[k]:
+                        if item not in merged:
+                            merged.append(item)
+                    cur[k] = merged
+            # ai_follow_up_answers：合并但不覆盖当前已有键
+            if isinstance(sd.get("ai_follow_up_answers"), dict):
+                cur_fua = cur.get("ai_follow_up_answers") or {}
+                if isinstance(cur_fua, dict):
+                    for fk, fv in sd["ai_follow_up_answers"].items():
+                        cur_fua.setdefault(fk, fv)
+                    cur["ai_follow_up_answers"] = cur_fua
+        # 写回到 answers（QuestionnaireAnswers.extra=forbid；确保不传多余键）
+        fields = set(type(answers).model_fields.keys())
+        filtered_raw = {k: v for k, v in cur.items() if k in fields}
+        # 关键：snapshot.model_dump(mode="json") 会把 enum 序列化成字符串；
+        # 写回时用 Pydantic 再 validate 一次，保证 enum/列表元素类型回到真实类型（否则 rule_engine 里 .value 会炸）
+        try:
+            validated = type(answers).model_validate(filtered_raw)
+            filtered_typed = validated.model_dump(mode="python")
+        except Exception:  # noqa: BLE001 - 类型校验失败就 fallback 为 raw，至少不影响主流程
+            filtered_typed = filtered_raw
+        for k, v in filtered_typed.items():
+            try:
+                object.__setattr__(answers, k, v)
+            except Exception:  # noqa: BLE001
+                # frozen / 不可写对象：跳过
+                break
+        # P7-07：构建 diff
+        after = answers.model_dump(mode="python")
+        diff: list[dict[str, Any]] = []
+        SINGLE_FIELDS = ("meal_period", "appetite", "budget", "explicit_food_preference", "max_distance_m")
+        LIST_FIELDS = ("tastes", "avoidances")
+        for k in SINGLE_FIELDS:
+            b = before.get(k)
+            a = after.get(k)
+            if b != a:
+                if (b in (None, [], "")) and (a not in (None, [], "")):
+                    diff.append(
+                        {
+                            "field": k,
+                            "kind": "single",
+                            "before": b,
+                            "after": a,
+                            "change": "filled",
+                        }
+                    )
+        for k in LIST_FIELDS:
+            b_list: list[Any] = list(before.get(k) or [])
+            a_list: list[Any] = list(after.get(k) or [])
+            added = [x for x in a_list if x not in b_list]
+            if added:
+                diff.append(
+                    {
+                        "field": k,
+                        "kind": "list",
+                        "before": b_list,
+                        "after": a_list,
+                        "change": "appended",
+                        "added_items": added,
+                    }
+                )
+        b_fua: dict[str, Any] = before.get("ai_follow_up_answers") or {}
+        a_fua: dict[str, Any] = after.get("ai_follow_up_answers") or {}
+        if isinstance(b_fua, dict) and isinstance(a_fua, dict):
+            added_keys = sorted(k for k in a_fua.keys() if k not in b_fua)
+            if added_keys:
+                added_map = {k: a_fua[k] for k in added_keys}
+                diff.append(
+                    {
+                        "field": "ai_follow_up_answers",
+                        "kind": "ai_follow_up",
+                        "before": b_fua,
+                        "after": a_fua,
+                        "change": "appended",
+                        "added_keys": added_keys,
+                        "added_items": added_map,
+                    }
+                )
+        logger.info(
+            "preference_merged user=%s snaps=%d fields_changed=%d",
+            current_user.user_id,
+            len(snaps),
+            len(diff),
+        )
+        return diff
+    except Exception as exc:  # noqa: BLE001 - 绝不阻塞主推荐
+        logger.warning("preference_merge_apply_fail user=%s err=%r", current_user.user_id, exc)
+        return empty
+
+
+def _hydrate_session_preference_context(
+    *,
+    session: RecommendationSession,
+    current_user: CurrentUser | None,
+    sb: SupabaseAdminClient | None,
+    limit: int = 3,
+) -> None:
+    """P6-04：把最近 N 条偏好快照 summary 注入 session.preference_context。
+
+    失败静默：AI 调用绝不能因为画像缺失/加载失败被阻塞。
+    """
+    if current_user is None or sb is None:
+        return
+    # 已注入过则跳过（同一会话多轮追问题不需要重复读库）
+    if session.preference_context:
+        return
+    logger = logging.getLogger("app.api.v1.recommendations")
+    try:
+        from app.api.v1.preferences import (
+            load_recent_preference_snapshots,
+            summarize_preference_snapshots_for_prompt,
+        )
+
+        snaps = load_recent_preference_snapshots(sb=sb, user_id=current_user.user_id, limit=limit)
+        summary = summarize_preference_snapshots_for_prompt(snaps)
+        session.preference_context = summary
+        # P7-05：实际合并条数（summary 非空才算有效合并；空串意味着"有快照但无有效总结"，count 保留原值 0）
+        session.preference_context_snapshot_count = len(snaps) if summary else 0
+    except Exception as exc:  # noqa: BLE001 - fail-open
+        session.preference_context = ""
+        session.preference_context_snapshot_count = 0
+        logger.warning(
+            "preference_context_hydrate_fail user=%s session=%s err=%r",
+            current_user.user_id,
+            session.session_id,
+            exc,
+        )
+
+
+class _AutowriteResult(NamedTuple):
+    """_try_autowrite_history_if_user 返回的结构化结果，供前端展示使用。"""
+    logged_in: bool
+    history_saved: bool
+    history_id: str | None
+    preference_saved: bool
+    preference_id: str | None
+    reason: str  # 中文简短说明，前端可直接展示
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "logged_in": self.logged_in,
+            "history_saved": self.history_saved,
+            "history_id": self.history_id,
+            "preference_saved": self.preference_saved,
+            "preference_id": self.preference_id,
+            "reason": self.reason,
+        }
 
 
 def _try_autowrite_history_if_user(
@@ -383,20 +678,36 @@ def _try_autowrite_history_if_user(
     payload: RecommendationsGenerateRequestV1,
     dict_version: str,
     items: list[RecommendationItem],
-) -> None:
-    """登录态下把最终推荐结果写入历史；失败静默日志，不阻塞主流程。"""
+    rule_answers: Any,  # QuestionnaireAnswers duck-type
+    source_session_id: str | None = None,
+    final_reason: str | None = None,
+) -> _AutowriteResult:
+    """登录态下：1) 写最终推荐历史；2) 写用户偏好画像快照（P6-01）。
+
+    始终返回 _AutowriteResult（失败不抛异常，原因写进 reason 字段）。
+    """
+    logger = logging.getLogger("app.api.v1.recommendations")
     if current_user is None or sb is None:
-        return
+        return _AutowriteResult(
+            logged_in=False,
+            history_saved=False,
+            history_id=None,
+            preference_saved=False,
+            preference_id=None,
+            reason="未登录或数据库暂不可用，未自动保存；可在结果页点「保存到画像」手动保存。",
+        )
+
+    hist_resp = None
     try:
         food_code = _extract_food_code(payload.answers_by_question_id)
         tags = _extract_tags(payload.answers_by_question_id)
-        snap = {
+        hist_snap: dict[str, Any] = {
             "entry_intent": payload.entry_intent,
             "questionnaire_version": payload.questionnaire_version,
             "dictionary_version": dict_version,
             "items": [i.model_dump() for i in items],
         }
-        write_user_recommendation(
+        hist_resp = write_user_recommendation(
             sb=sb,
             user=current_user,
             payload=HistoryWriteRequest(
@@ -404,14 +715,62 @@ def _try_autowrite_history_if_user(
                 location=None,
                 radius_meters=None,
                 tags=tags,
-                recommendation_snapshot=snap,
+                recommendation_snapshot=hist_snap,
                 result_count=len(items),
                 poi_provider=None,
+                session_id=source_session_id,
+                final_reason=final_reason,
             ),
         )
     except Exception as exc:  # noqa: BLE001 - 不阻塞主流程
-        log = logging.getLogger("app.api.v1.recommendations")
-        log.warning("history_autowrite_failed user=%s err=%r", current_user.user_id, exc)
+        logger.warning("history_autowrite_failed user=%s err=%r", current_user.user_id, exc)
+        hist_resp = None
+
+    pref_resp = None
+    pref_err_reason: str | None = None
+    try:
+        snapshot_dump: dict[str, Any]
+        if hasattr(rule_answers, "model_dump"):
+            snapshot_dump = rule_answers.model_dump(mode="json")
+        else:
+            snapshot_dump = dict(rule_answers) if isinstance(rule_answers, dict) else {"raw": str(rule_answers)}
+        if final_reason:
+            snapshot_dump["_meta"] = {"final_reason": final_reason}
+        pref_resp = write_user_preference_snapshot(
+            sb=sb,
+            user=current_user,
+            payload=PreferenceWriteRequest(
+                questionnaire_version=payload.questionnaire_version,
+                dictionary_version=dict_version,
+                source_session_id=source_session_id,
+                source_history_id=(hist_resp.id if hist_resp is not None else None),
+                snapshot=snapshot_dump,
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001 - 绝对不阻塞主推荐流程
+        logger.warning("preference_autowrite_failed user=%s err=%r", current_user.user_id, exc)
+        pref_err_reason = f"{type(exc).__name__}: {exc}"
+        pref_resp = None
+
+    history_ok = hist_resp is not None
+    pref_ok = pref_resp is not None
+    if history_ok and pref_ok:
+        reason = "✓ 已自动保存：推荐历史 + 饮食偏好画像"
+    elif history_ok:
+        reason = f"已保存历史记录；画像写入失败（{pref_err_reason or '未知原因'}），可手动重试"
+    elif pref_ok:
+        reason = "已保存画像；推荐历史写入失败（不影响画像时间轴）"
+    else:
+        reason = f"保存失败：历史和画像均未写入（{pref_err_reason or '数据库或账号异常'}），请稍后重试或手动保存"
+
+    return _AutowriteResult(
+        logged_in=True,
+        history_saved=history_ok,
+        history_id=str(hist_resp.id) if hist_resp is not None else None,
+        preference_saved=pref_ok,
+        preference_id=str(pref_resp.id) if pref_resp is not None else None,
+        reason=reason,
+    )
 
 
 def _session_to_state_response(session: RecommendationSession) -> SessionStateResponseV1:
@@ -426,6 +785,7 @@ def _session_to_state_response(session: RecommendationSession) -> SessionStateRe
         max_rounds=3,
         candidates=candidates_dump,
         final_reason=session.final_reason,
+        merged_pref_fields=list(session.merged_pref_fields or []),
     )
 
 
@@ -447,7 +807,29 @@ async def recommendations_session_start(
     except Exception:  # noqa: BLE001
         raw_body = {}
 
-    payload, _bank, rule_answers = _validate_and_load_for_session_start(raw_body=raw_body)
+    payload, _bank, rule_answers, merged_pref_fields = _validate_and_load_for_session_start(
+        raw_body=raw_body,
+        current_user=current_user,
+        sb=sb,
+    )
+
+    # 0b) P5-04A：AI 增益登录前置；后端派生 derived_generation_mode
+    assert settings is not None
+    derived_generation_mode: str = "rule"
+    quota_user_id: str | None = None
+    if payload.prefer_ai_gain:
+        if current_user is None:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=(
+                    "「AI 优化推荐」需要先登录后使用（每天 3 次额度）；"
+                    "未登录可使用免费的确定性规则引擎推荐（默认模式，开关关闭即可）。"
+                ),
+            )
+        derived_generation_mode = "ai"
+        quota_user_id = current_user.user_id
+
     dict_version = payload.dictionary_version or DEFAULT_DICTIONARY_VERSION
     try:
         get_food_dictionary_repository.cache_clear()
@@ -467,7 +849,6 @@ async def recommendations_session_start(
             details={"reason": str(exc)},
         ) from exc
 
-    assert settings is not None  # Depends(get_settings) 保证非空；防御 mypy
     # 1) 创建会话 + 尝试生成第 1 道 AI 追问
     mgr = get_recommendation_session_manager(settings)
     uid = current_user.user_id if current_user is not None else None
@@ -476,23 +857,51 @@ async def recommendations_session_start(
         questionnaire_answers_by_qid=payload.answers_by_question_id,
         questionnaire_version=payload.questionnaire_version,
         dictionary_version=dict_version,
+        # G-07：generation_mode 最终由服务端派生（结合 prefer_ai_gain + 登录态）
+        generation_mode=derived_generation_mode,
         rule_answers=rule_answers,
+    )
+    # P7-07：冷启动画像合并信息传给前端 banner
+    session.merged_pref_fields = list(merged_pref_fields)
+    # P6-04：把最近 3 条偏好画像 summary 注入 session，让 system prompt 拥有长期先验
+    _hydrate_session_preference_context(
+        session=session, current_user=current_user, sb=sb, limit=3,
     )
     next_q = await mgr.start_and_get_next(session=session)
 
     # 2) 若 AI 明确认为信息已充分（返回 None）或已经 3 轮，则直接 final
     if next_q is None or session.round_index_1based_next > 3:
         items = await mgr.try_ai_finalize_recommendation(session=session, repo=repo)
-        _try_autowrite_history_if_user(
+        autowrite_result = _try_autowrite_history_if_user(
             current_user=current_user, sb=sb, payload=payload,
             dict_version=dict_version, items=items,
+            rule_answers=session.rule_answers,
+            source_session_id=session.session_id,
+            final_reason=session.final_reason,
         )
         resp = _session_to_state_response(session)
         resp.question = None
+        resp.autowrite = autowrite_result.to_dict()
+        # P5-04A / P5-07：附加 used_ai + ai_quota
+        resp.used_ai = bool(session.final_reason == "ai_gain")
+        chat_service = getattr(mgr, "_chat_service", None)
+        if chat_service is not None and hasattr(chat_service, "peek_quota"):
+            resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)  # type: ignore[attr-defined]
+        else:
+            resp.ai_quota = {
+                "user_used": 0,
+                "user_limit": int(getattr(settings, "ai_daily_user_limit", 3) or 3),
+                "global_used": 0,
+                "global_limit": int(getattr(settings, "ai_global_daily_limit", 100) or 100),
+            }
         return resp
 
     resp = _session_to_state_response(session)
     resp.question = next_q
+    # P5-07：follow_up 阶段也给一份额度（前端开关上方展示 "今日 X/3" 让用户知道还有多少）
+    chat_service = getattr(mgr, "_chat_service", None)
+    if chat_service is not None and hasattr(chat_service, "peek_quota"):
+        resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)  # type: ignore[attr-defined]
     return resp
 
 
@@ -565,6 +974,11 @@ async def recommendations_session_answer(
             details={"session_id_prefix": str(exc)[:10] + "…"},
         ) from exc
 
+    # P6-04：同一会话多轮共享一次 preference_context（start 时注入过的这里跳过）
+    _hydrate_session_preference_context(
+        session=session, current_user=current_user, sb=sb, limit=3,
+    )
+
     # 加载 repo（最后生成 final 需要它；答问阶段也要用 repo 校验对照默认题 value）
     dict_version = session.dictionary_version
     try:
@@ -624,10 +1038,27 @@ async def recommendations_session_answer(
             else session.dictionary_version
         ),
     )
-    _try_autowrite_history_if_user(
+    autowrite_result = _try_autowrite_history_if_user(
         current_user=current_user, sb=sb, payload=start_payload_like,
         dict_version=session.dictionary_version, items=items,
+        rule_answers=session.rule_answers,
+        source_session_id=session.session_id,
+        final_reason=session.final_reason,
     )
     resp = _session_to_state_response(session)
     resp.question = None
+    resp.autowrite = autowrite_result.to_dict()
+    # P5-04A / P5-07：answer→final 同样回传 used_ai + ai_quota（与 start→final 保持一致）
+    resp.used_ai = bool(session.final_reason == "ai_gain")
+    quota_user_id = session.user_id
+    chat_service = getattr(mgr, "_chat_service", None)
+    if chat_service is not None and hasattr(chat_service, "peek_quota"):
+        resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)  # type: ignore[attr-defined]
+    else:
+        resp.ai_quota = {
+            "user_used": 0,
+            "user_limit": int(getattr(settings, "ai_daily_user_limit", 3) or 3),
+            "global_used": 0,
+            "global_limit": int(getattr(settings, "ai_global_daily_limit", 100) or 100),
+        }
     return resp

@@ -1,91 +1,209 @@
-# EatWhat
+# EatWhat — 今天吃什么决策助手
 
-> 先决定吃什么，再在附近找到它。
+> 先定方向，再找附近。
+> **响应式 Web：少量自适应问题（必要时 AI 追问）→ 锁定一种食物类型 → 附近真实商家。**
 
-EatWhat 是一个响应式 Web 饮食选择辅助工具：先用少量自适应问题（必要时再结合 AI 追问）帮你确定一种想吃的**食物类型**，再通过地图服务把选择落到附近的真实商家。它解决的是"今天吃什么"的决策困难，而不是简单展示餐厅列表。
+EatWhat 不做"餐厅列表展示"，而是聚焦在「今天吃什么」这个更上游、更让人纠结的决策上。
 
-> **状态：工程骨架搭建中（P1）。** 产品与设计阶段（P0）已完成：权威 PRD v1.2、名词表、流程、信息架构、可点击原型与可用性最小验证均已收敛。正式前后端正在初始化，暂未提供可运行的在线演示。
+## 1. 功能矩阵（已完成 A / B 两个冲刺）
 
-## 核心功能（规划，按阶段实现）
+| 模块 | 状态 | 说明 |
+|---|---|---|
+| 🏠 **首页 Hero + 活动横幅** | ✅ 已交付（B3-2） | 主 CTA「开始推荐」+ 到社区入口；首页顶部 2 条活动横幅（打卡送 AI 额度 / 主题 PK），localStorage 记 7 天关闭 |
+| 🧭 **自适应问卷（规则引擎）** | ✅ 已交付（P2 / A） | 2~3 基础题 + 2~3 后端自适应题；七维（菜系/辣度/预算/人群/份量/场景/营养）归一化打分 Top5 |
+| 🤖 **AI 增益（DeepSeek）** | ✅ 已交付（P5 / A） | 可选开关，默认关闭=免费规则；开启需登录；最多 3 轮 AI 追问，失败静默回退规则引擎 |
+| 🔁 **AI 日额度 & 回滚** | ✅ 已交付（A） | 双维度日限流（用户/全局），进程内 TTLCache + 可选 Redis；**预占-回滚语义：成功才扣，失败全退** |
+| 🎯 **推荐结果页** | ✅ 已交付（A） | 1→3→5 渐进展示；来源 chip（AI / 规则 / 规则兜底 9 种细分语义）；一键「查附近商家」 |
+| 🏪 **附近商家（/nearby）** | ✅ 已交付（P4） | 支持 `?food_code=xxx` 直达；高德 POI / Mock 双模式；预算为软偏好，不承诺商家价格 |
+| 👤 **账号 & 画像** | ✅ 已交付（P4） | Supabase Magic Link 无密码登录；偏好画像 + 推荐历史；GDPR 删除账号（含历史 + token 失效） |
+| 🎪 **社区（/community）** | ✅ 已交付（B） | ① 本周主题 PK（投票/进度条/截止时间/锚点跳转）；② Feed 卡片（🔥最热 / ⏰最新 tab + 点赞乐观更新）；③ 今日推荐 Top5 榜（金银铜徽章 → 去吃 → /nearby）；④ 右下悬浮「分享今天吃了啥」FAB（P3 再做发布） |
+| 📜 **历史 & 设置** | ✅ 已交付（A 优化） | /settings?tab=preference 锚点直达；「查看偏好时间轴」按钮已修复（React Router useNavigate + query params） |
+| 🧪 **测试** | ✅ 已交付 | 后端 pytest 40+；前端 vitest 27 + typecheck + oxlint；路径 A 全链路 E2E 脚本 |
+| 🚢 **部署骨架（Docker）** | 🚧 C2 | backend/frontend Dockerfile + docker-compose（本阶段交付） |
+| 🧭 **E2E 冒烟闭环** | 🚧 C3 | 社区 + 横幅 + Top 榜三条关键路径（本阶段交付） |
 
-- 首页三路分流：社区/活动明确食物直达附近商家；"开始推荐"进入混合自适应问卷。
-- 混合自适应问卷：2–3 个基础题 + 后端规则选择 2–3 个自适应题，覆盖七个信息维度。
-- 登录边界：未登录可用全部非 AI 功能；仅调用 AI 时要求登录并恢复问卷。
-- 逐轮 AI 追问（最多 3 轮）→ 固定 5 个食物候选，按 1→3→5 渐进展示。
-- 选定食物后查询附近商家；预算只影响食物方向，不承诺商家价格。
-- 收尾（评价 / 短问卷 / 匿名分享）全部自愿可跳过。
+## 2. 架构总览
 
-## 技术栈
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           浏览器（React 19 + Vite 8）                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │     Home     │  │  Recommend   │  │  Community   │  │  Nearby/Settings │  │
+│  │+CampaignBanner│ │ (1→3→5 expand)│ │Theme+Feed+Top│ │  History/Login   │  │
+│  └────────┬─────┘  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘  │
+│           │               │                  │                   │            │
+│           ▼               ▼                  ▼                   ▼            │
+│          services/api/client.ts（统一错误体 error.code/request_id + auth JWT）│
+└─────────────────────────────┬────────────────────────────────────────────────┘
+                              │ /api/v1/*
+                              ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        FastAPI（Python 3.13 · Uvicorn）                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │recommendations│ │  community   │  │auth/history  │  │location/system/AI│  │
+│  │+session start │ │feed/trending │ │Magic Link    │ │POI/JWKS/AI stats │  │
+│  │+answer + AI  │ │theme/vote/like│ │GDPR delete   │ │                  │  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └────────┬─────────┘  │
+│         │                 │                  │                   │            │
+│         ▼                 ▼                  ▼                   ▼            │
+│  ┌───────────────── Rule Engine (7维 打分 Top5) ──────────────────────────┐  │
+│  │                           ┌──────────────────┐                           │  │
+│  │                           │ Recommendation   │  状态机：follow_up×3 →final │  │
+│  │                           │ Session          │                           │  │
+│  │                           └────────┬─────────┘                           │  │
+│  │       generation_mode=rule 直接生成  │  generation_mode=ai 先尝试 ChatSvc │  │
+│  │                                    ↓                                     │  │
+│  │    ChatService(DeepSeek V4 Flash / Mock) + Rate Limiter(预占→回滚)      │  │
+│  │    失败分类 9 种 → final_reason → 前端来源 chip                          │  │
+│  └──────────────────────────────────────────────────────────────────────────┘  │
+│                                    │                                           │
+│               ┌────────────────────┼─────────────────────┐                   │
+│               ▼                    ▼                     ▼                   │
+│         Supabase Postgres      Redis（可选）         高德 / DeepSeek          │
+│         RLS 强制 auth.uid()   多 worker AI 限流     Provider 抽象可替换      │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
 
-| 层 | 技术 |
-|---|---|
-| 前端 | React + TypeScript + Vite |
-| 后端 | Python 3.13 + FastAPI（uv 管理） |
-| 数据 | PostgreSQL / Supabase（后置） |
-| 认证 | Supabase Auth（后置） |
-| 地图 / AI | Provider 抽象，Mock/Live 双模式（后置） |
-
-## 目录结构
+## 3. 目录结构
 
 ```text
 project0717/
-├── backend/      # FastAPI 后端（建设中）
-├── frontend/     # React/Vite 前端（建设中）
-├── docs/         # 全部设计、契约与计划文档
-├── prototype/    # P0 可点击原型（静态）
-└── .env.example  # 环境变量示例（不含真实密钥）
+├── backend/                    # FastAPI 后端
+│   ├── app/
+│   │   ├── api/v1/             # 路由（recommendations / community / auth / history / ...）
+│   │   ├── core/               # config / 加密 / 日志脱敏 / middleware
+│   │   ├── services/           # rule_engine / recommendation_session / ai/
+│   │   ├── repositories/       # 字典加载
+│   │   ├── schemas/            # Pydantic 契约
+│   │   └── data/               # food_dictionary / question_bank / demo_locations
+│   ├── scripts/encrypt_ai_key.py  # 🔐 AI Key Fernet 加密工具
+│   ├── tests/                  # pytest（40+）
+│   ├── _make_e2e_session.py    # 路径 A HTTP E2E（不启动服务器）
+│   └── e2e_browser.py          # Playwright UI E2E
+├── frontend/                   # React 19 + Vite 8 + TypeScript 6
+│   ├── src/
+│   │   ├── pages/              # Home / Recommend / Community / Nearby / History / Settings / Login
+│   │   ├── components/         # CampaignBanner / layout(Header+MobileNav+AppShell) / profile
+│   │   ├── context/AuthContext.tsx  # Supabase Auth + 注入 JWT
+│   │   ├── services/api/       # client.ts + types/* （后端契约镜像）
+│   │   ├── lib/                # sourceBadge / supabase 初始化
+│   │   └── styles/             # tokens / global / recommendations / nearby
+│   └── tests 由 vitest 管：*.test.ts(x) 散布在源码旁
+├── docs/                       # 24 份设计与契约文档（PRD v1.2、API、DB、AI、ROADMAP…）
+├── prototype/                  # P0 可点击低保真原型（静态）
+├── .env.example                # 环境变量模板（AI Key 只放 ENC: 密文示例，绝不明文）
+├── start-dev.bat               # Windows 一键启动前后端（dev）
+└── docker-compose.yml          # 🚧 C2：本阶段交付 → 前后端 + 可选 Redis
 ```
 
-## 本地运行
+## 4. 本地启动（3 分钟跑通 MVP）
 
-前置：Node.js 24 LTS、Python 3.13、[uv](https://docs.astral.sh/uv/)。无需任何第三方 Key 即可启动（默认 Mock，尚未接入外部服务）。
+**前置**：Node.js 24 LTS · Python 3.13 · [uv](https://docs.astral.sh/uv/)（可选 Docker，见 C2）。
 
-后端：
+### Windows 一键启动
+
+```powershell
+# 在项目根目录直接双击或执行：
+.\start-dev.bat
+```
+
+### 手动：后端（默认 Mock，不用任何 Key 即可）
 
 ```powershell
 cd backend
-uv sync          # 首次安装依赖并生成/同步 .venv 与 uv.lock
-uv run uvicorn app.main:app --reload
+copy .env.example .env      # 首次；不填任何 Key = 全 Mock
+uv sync                     # 安装依赖（含 pytest 等 dev 包）
+uv run uvicorn app.main:app --reload --port 8000
 # 验证：
-#   /health/live  -> {"status":"ok"}
-#   /health/ready -> {"status":"ready","config":"ok","database":"not_configured"}
-#   /nope         -> 404 统一错误体（error.code/request_id），并带 X-Request-ID 响应头
+#   http://127.0.0.1:8000/health/live       →  {"status":"ok"}
+#   http://127.0.0.1:8000/docs              →  Swagger UI（所有已注册接口）
+#   http://127.0.0.1:8000/api/v1/community/feed?sort=hot   →  B 社区 mock 数据 10 条
 ```
 
-后端壳已包含：配置分层（pydantic-settings）、统一错误响应、请求 ID、日志脱敏；`/health/ready` 在未配置数据库时返回 `database:"not_configured"` 而非 503。
-
-前端：
+### 手动：前端（Vite 反代 `/api` → 8000）
 
 ```powershell
 cd frontend
-npm install
-npm run dev
-# 打开 http://localhost:5173/
+npm install        # 或 npm ci （如果有锁文件）
+npm run dev        # http://localhost:5173/
 ```
 
-运行测试与检查：
+> Vite 的 `server.proxy` 默认已把 `/api/*` 转发到 `http://127.0.0.1:8000`，**不用跨域配置**。浏览器地址以 `http://localhost:5173/` 为规范写法；后端 CORS 同时允许 `localhost` 与 `127.0.0.1`。
+
+### 打开 Supabase 认证 + History（可选）
+
+1. 到 [Supabase Dashboard](https://supabase.com/dashboard) 创建免费项目。
+2. 把下面 4 项填进 `backend/.env`：
+   - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `SUPABASE_JWT_SECRET`
+3. 前端 `frontend/.env.local` 里写：
+   ```
+   VITE_SUPABASE_URL=...
+   VITE_SUPABASE_ANON_KEY=...
+   ```
+4. 重跑后端，`/health/ready` 会从 `not_configured` 变成 `ready`。
+
+### 打开 DeepSeek AI 增益（可选，A 阶段）
+
+**明文 Key 禁止直接写 `.env`。** 用加密工具：
 
 ```powershell
-cd backend && uv run pytest && uv run ruff check . && uv run mypy app
-cd frontend && npm run build
+cd backend
+uv run python scripts/encrypt_ai_key.py --auto-generate
+# ↓ 粘贴两次明文 sk-xxxx，脚本输出：
+# EW_AI_KEY_PASSPHRASE=...
+# EW_AI_SALT=...
+# AI_API_KEY=ENC:gAAAAA...
+# AI_PROVIDER=deepseek
+# AI_MODEL=deepseek-v4-flash
 ```
 
-> 当前仅提供健康检查与默认 Vite 页面；业务功能按实施计划 P1–P8 逐步实现。
+把 5 行全部复制进 `backend/.env`，重启后端即可。前端在「开始推荐」页勾上「使用 AI 优化推荐」（默认关），就会用 AI。
 
-## 文档
+**失败扣额？不会。** AI 额度使用 **预占-回滚语义**：
+- 预占：调用前先占 1 次额度；
+- 成功：保持扣减（`final_reason=ai_gain`）；
+- 任何失败（超时/鉴权/429/schema 校验失败…）：**立即把预占的 1 次加回去**，用户额度不受损。
 
-权威入口见 `docs/`：
+## 5. 质量门禁（本地必跑）
 
-- 产品基线：`01_EatWhat_PRD_产品需求文档_v1.2_权威需求基线.md`、`00_EatWhat_统一名词表与状态定义_v1.0.md`
-- 技术契约勘误：`22_EatWhat_P0-07_技术文档收敛清单_v1.0.md`（16 条权威工程契约）
-- 实时计划：`EatWhat_实施计划与状态.md`、`EatWhat_项目记忆.md`
+```powershell
+# 后端
+cd backend
+uv run pytest -q                                       # 单测（40+ 条，AI HTTP 走 MockTransport）
+uv run python _make_e2e_session.py --skip-delete       # 路径 A E2E（不删除账号，留历史）
 
-## 已知限制（诚实声明）
+# 前端
+cd frontend
+npm run typecheck    # tsc -b（禁止 any 逃逸）
+npm run lint         # oxlint 103 规则
+npm run test         # vitest run（27 条）
+npm run build        # vite build → dist/
+```
 
-- 目前没有任何正式前后端代码，以下均为计划而非已实现功能：登录、AI、地图、历史、社区、活动、配额、部署。
-- 社区"大家今天吃什么"在没有真实数据时不展示虚构人数。
-- 预算为食物方向软偏好，不保证附近商家价格。
+## 6. 文档索引
 
-## License
+| 文档 | 作用 |
+|---|---|
+| `docs/01_EatWhat_PRD_产品需求文档_v1.2_权威需求基线.md` | 产品权威基线 |
+| `docs/00_EatWhat_统一名词表与状态定义_v1.0.md` | 所有术语/状态的统一叫法（前后端必读） |
+| `docs/05_EatWhat_系统架构设计.md` | 模块边界、数据流、认证、RLS |
+| `docs/07_EatWhat_API接口设计.md` | REST 契约（B 阶段 community 接口） |
+| `docs/08_EatWhat_AI推荐系统设计.md` | generation_mode / final_reason / 9 种失败码 |
+| `docs/09_EatWhat_隐私安全与免责声明.md` | GDPR 删除、POI 坐标不写历史、AI 绝不编商家 |
+| `docs/12_EatWhat_ROADMAP.md` | P0–P8 阶段规划 |
+| `backend/README.md` / `frontend/README.md` | 前后端各自的目录、命令、细节 |
 
-MIT（拟采用，尚未添加 LICENSE 文件）。
+## 7. 已知限制（诚实声明）
+
+- 预算档位是「食物方向的软偏好」，**不承诺附近商家价格准确**（高德 POI 价格字段本身不完整）。
+- 社区当前为内存 mock 数据，重启后端会重置；分享动态（FAB 弹层里的功能）在 P3。
+- AI 仅推荐「食物类型」，**绝不编造不存在的商家**（POI 查询是独立步骤，可单独 Mock/Live）。
+- 部署骨架本阶段（C2）提供 Dockerfile + compose，Ingress / HTTPS 证书 / CI 发布按你实际环境补。
+
+## 8. 下一步
+
+继续 C 阶段：**C1 → C2（Docker 化）→ C3（E2E 冒烟 3 条关键路径）**。
+运行方式：在项目根目录 `docker compose up -d`（或 Windows 下 `-f` 绝对路径，见 `docker-compose.yml` 注释）。

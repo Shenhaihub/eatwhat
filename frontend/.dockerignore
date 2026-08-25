@@ -1,0 +1,24 @@
+# frontend/.dockerignore
+
+# ---- 运行期 & 依赖（容器内自己 npm ci，不要把本地 node_modules 拷进去） ----
+node_modules/
+dist/
+
+# ---- 本地机密 ----
+.env
+.env.*
+!.env.example
+
+# ---- 编辑器 / OS ----
+.DS_Store
+.vscode/
+.idea/
+
+# ---- 测试（不进生产镜像） ----
+coverage/
+.vitest/
+*.log
+
+# ---- Git（不需要） ----
+.git/
+.github/
