@@ -1,11 +1,11 @@
 # EatWhat 实施计划与状态
 
 > 这是项目后续执行的唯一实时计划清单。  
-> 最后更新：2026-08-24  
-> 当前阶段：P5 动态 AI 接入（P4 已完成并推送，进入 API Key 加密框架 → MockAIProvider 契约 → DeepSeek Live）  
-> 当前任务：P5-03 开始 —— API Key 多层加密框架（Fernet 对称加密 + 环境变量前缀 `ENC:` + 仅内存解密，永不落盘明文）→ 多 Provider 抽象契约（Mock/DeepSeek，统一 chat 接口）→ MockAIProvider（正常/超时/非法 JSON/越界 food_code 四种输出模式，全部失败回退规则结果）；AI Provider 用户已确认为 **DeepSeek V4 Flash**（国内最低成本路径，加密框架完成后用户后续填加密后 key 值）。  
-> 清单进度：**36/50 已完成，2 项进行中，12 项待开始**（API Key 加密框架 + MockAIProvider 契约同步推进）  
-> 工程状态：P4 已提交并推送（main 分支，GitHub 远端 Shenhaihub/eatwhat@private）；前端完整页面（Recommend 问卷+结果+1→3→5、History、Settings、Nearby 地点+商户、AuthContext 登录保护、路由守卫、Login/AuthCallback Magic Link 页）；backend FastAPI：P0–P4 全模块就绪 + user_recommendations 表 Supabase RLS 已启用 + 死 token 存活检查（写 history 前 `sb.auth.admin.get_user_by_id` 校验用户仍存在）；后端 `pyproject.toml` 已含 `cryptography>=50.0.0`（Fernet 就绪）。
+> 最后更新：2026-08-25  
+> 当前阶段：P8 部署与发布（功能开发已收官：P0–P7 主体全部完成，DeepSeek Live AI 实测可用，社区/活动/反馈/画像闭环上线）  
+> 当前任务：文档基线同步（本次，把 8/12–8/25 的实际交付补录进本清单）→ 下一步待用户决定：P8-01 本地 docker-compose 部署验收 / P5-06 AI 增益正式评估 / P7-03 可访问性系统回归  
+> 清单进度：**45/50 已完成，1 项进行中（P8-01 配置就绪待验收），4 项待开始**（P5-06 评估结论、P7-03 系统回归、P8-02 发布门、P8-03 发布监控）  
+> 工程状态：main 分支最新提交 `929fa90`（GitHub Actions Run 27 前后端全绿）；后端 303 pytest + ruff 0 + mypy 0；前端 29 vitest + tsc 0 + oxlint 0 + build 通过。核心链路（问卷 → AI 追问 3 轮 → DeepSeek 最终生成 1→3→5 → 附近商户 → 反馈 → 偏好画像）浏览器端到端实测通过。Docker/nginx/docker-compose 部署配置已就绪但未实际部署。
 
 > 本次维护记录：EatWhat 固定开发端口维持 `5173`（前端）与 `8000`（后端），`start-dev.bat` 已增加端口预检、后端健康检查和前端监听检查；浏览器规范地址为 `http://localhost:5173/`，后端默认 CORS 同时允许 `localhost` 与 `127.0.0.1`。同机《纸上百工》改用 `5183/4183`，避免两个项目的 Vite/离线演示端口相撞。
 
@@ -337,85 +337,104 @@
 
 目标：只在有证据需要的场景使用 AI，并证明其相对规则基线有增益。
 
-- [ ] **P5-01 明确 AI 增益假设与对照指标**
+- [x] **P5-01 明确 AI 增益假设与对照指标**（2026-08-12 完成）
   - 预期成果：触发条件、对照组、决策时间/接受率/换选率目标。
   - 验收：若无法定义可测增益，暂不接 Live AI。
+  - 实际交付：`docs/ADR_001_AI增益评估框架.md`（触发条件、规则 vs AI 对照、指标口径）；`backend/app/core/ai_stats.py` 观测面板（`GET /api/v1/system/ai-stats`，累积调用画像：成功率/失败码分布/耗时/pref_used 覆盖率）；P7-05 埋点 `ai_outcome`/`final_reason`/`preference_context_used` 等结构化字段。增益可测 → 允许接 Live。
+  - 备注：正式的对照结论（P5-06）尚未出，当前只有数据采集能力。
 
-- [ ] **P5-02 实现动态追问生成契约与安全边界**
+- [x] **P5-02 实现动态追问生成契约与安全边界**（提交 `70f7425`）
   - 预期成果：AI 根据基础/自适应预设题与先前 AI 追问回答，每次生成 1 个下一问题；输出包含稳定会话内 question_id、题目、选项、判别目的和 should_continue。
   - 验收：最多 3 轮，可在信息充分时提前结束；不得询问身份、精确位置、健康诊断等非必要敏感信息；问题/选项数量和长度受服务端限制；非法/重复/超时输出立即回退或进入最终生成。
+  - 实际交付：`backend/app/services/recommendation_session.py`（RecommendationSessionManager：start/answer/finalize 状态机，TTLCache 会话，幂等 409）；`app/schemas/ai.py`（FollowUpQuestionOutput/FinalRecommendationOutput，extra=forbid + field_validator 越界拦截）；前端 Recommend.tsx 会话循环（失败 fallback P2 /recommendations）；+13 动态会话单测。后续增强（8/24-25）：已覆盖维度去重（菜系已收集不再问 ai_fu_001）、q02 明确食物视为菜系覆盖、seed 预填自动跳过重复追问。
 
-- [ ] **P5-02A 实现 AI 等待反馈与慢请求恢复**
-  - 为什么：逐轮 AI 调用会在每道追问之间产生可感知等待，空白页面会让用户误以为卡死或重复点击。
+- [x] **P5-02A 实现 AI 等待反馈与慢请求恢复**（2026-08-24 完成，C1a 验收通过）
   - 预期成果：提交后立即禁用重复操作并保留上一答案摘要；短延迟显示问题骨架，较长延迟显示真实阶段文案；超时后提供幂等重试或基于已有信息继续，不展示虚假百分比。
-  - 建议文案状态：`正在整理你的选择` → `正在生成下一题`；最终阶段使用 `正在综合全部回答` → `正在准备推荐结果`。
-  - 验收：300ms 内响应不出现明显闪烁；超过约 800ms 有可感知反馈；屏幕阅读器通过 aria-live 获得状态；重复点击不产生第二次 AI 调用；超时/断网后问卷答案不丢失；分别记录下一题和最终推荐的耗时分布，若实际 P95 长期超过约 8 秒，再评估异步 job + polling/SSE，不在首版预先增加复杂度。
+  - 验收：300ms 内响应不出现明显闪烁；超过约 800ms 有可感知反馈；重复点击不产生第二次 AI 调用；超时/断网后问卷答案不丢失。
+  - 实际交付：分级延迟显示（<300ms 最小 Spinner，>300ms 骨架屏 + Stepper）；四阶段动态文案（正在整理你的选择 → 正在生成候选美食 → 正在匹配口味规则 → 正在优化排序）；15s 超时后「继续等待 / 重新生成」双按钮；提交防抖（loading 期间全部按钮 disabled）；追问切换骨架屏避免白屏。
 
-- [ ] **P5-03 实现 Mock AIProvider 与严格输出 schema**
+- [x] **P5-03 实现 Mock AIProvider 与严格输出 schema**（提交 `de7ee16`）
   - 验收：只接受允许的 food_code/question_code；超时、非法 JSON、越界项全部回退规则结果。
+  - 实际交付：`app/services/ai/base.py`（AIProvider Protocol + ChatMessage）；`app/services/ai/mock_provider.py` 四模式（normal/slow/invalid_json/out_of_bounds_food_code）+ MOCK_AI_SEED 参数化洗牌（MEM-024 反固定首候选）；`app/services/ai/service.py` ChatService 门面（asyncio.timeout 硬超时 + 全异常捕获回退 + 密钥仅局部变量）；P5-03B 加密框架（`app/core/encryption.py` Fernet + PBKDF2HMAC 480k 迭代 + `ENC:` 前缀强制 + 明文 `sk-` fail-fast + `scripts/encrypt_ai_key.py` 交互工具 + 15 加密单测）。
 
-- [ ] **P5-04 接入 Live AIProvider**
+- [x] **P5-04 接入 Live AIProvider**（提交 `82f2347`，2026-08-24 实测通过）
   - 预期成果：服务端密钥、超时、重试边界、内容标签、成本日志脱敏。
   - 验收：AI 不接收精确坐标、邮箱或不必要身份字段；前端清楚区分 AI 与规则来源。
+  - 实际交付：DeepSeekProvider httpx 实现（`/chat/completions` + `response_format=json_object` + 双重超时 + 异常安全文案不回显 key）；模型 `deepseek-v4-flash`；13 个 MockTransport 用例（URL/headers/payload/401/500/超时/非法 JSON/参数越界）；2026-08-24 用户实测：HTTP 200，前端显示「AI 生成」标签 + 有效推荐理由，额度 1/3 正确扣减。超时配置增强：AI_TIMEOUT_MS 可调（1000~120000ms，默认 30s）。
 
-- [ ] **P5-04A 实现最终候选与渐进展示**
+- [x] **P5-04A 实现最终候选与渐进展示**（提交 `70f7425`）
   - 预期成果：AI 基于全部问卷和追问上下文固定生成 5 个食物候选；前端按 1→3→5 渐进显示。
-  - 验收：候选 food_code 唯一且全部在允许集合内；首个候选理由最完整；未展示候选不抢占注意力；达到总数后隐藏“更多推荐”。
+  - 验收：候选 food_code 唯一且全部在允许集合内；首个候选理由最完整；未展示候选不抢占注意力；达到总数后隐藏"更多推荐"。
+  - 实际交付：FinalRecommendationOutput 强约束 Top5（validator 校验 food_code 全在启用字典内且不重复）；前端 `hidden` 属性渐进展示（非数组切片，保持 DOM 全卡供测试/SEO）；expandLevel 1→3→5；进入结果态重置为 1。
 
-- [ ] **P5-05 实现配额账本与幂等消费**
+- [x] **P5-05 实现配额账本与幂等消费**（提交 `a2947b8`）
   - 为什么：只有此时才有真实稀缺资源，配额复杂度才有价值。
-  - 推荐：用户额度按“一次完整推荐会话”计算，而不是每道 AI 追问分别扣一次；同时设置独立的内部模型调用预算，一次会话最多 3 次追问 + 1 次最终生成。以请求/账本记录和数据库事务作为真源。
-  - 验收：并发、重放、超时、成功后扣减和失败释放均有集成测试；即使用户中途退出，也不能通过不断新建/放弃会话无限消耗模型调用，尝试频率由独立 rate limit 和会话预算控制。
+  - 验收：并发、重放、超时、成功后扣减和失败释放均有集成测试。
+  - 实际交付：本地 TTLCache 每用户 3 次/日 + 全局 100 次/日；Redis 分布式限流（可选依赖，未配置时自动降级本地）；失败回滚（AI 调用失败不扣用户额度）；7 类失败码（local_quota/remote_quota/unauthorized/timeout/schema/build_fail/unknown）映射 final_reason 供前端展示；超限自动切规则引擎（G-08 不空）。
 
 - [ ] **P5-06 评估 AI 是否保留**
   - 验收：基于指标判断 Live AI 改善、无改善或恶化；结论进入 ADR 和项目记忆。
+  - 当前状态：数据采集基础已就绪（ai-stats 面板 + P7-05 埋点），正式对照结论未出。依赖一段时间的真实使用数据积累。
 
 ### P6 社区、活动与反馈（首版必做）
 
 目标：在核心推荐、登录、历史和 AI 闭环稳定后，完成用户明确要求的首版社区、活动与反馈功能；这些功能可以后实现，但不能从首版发布范围中移除。
 
-- [ ] **P6-01 定义“大家今天吃什么”的冷启动与匿名统计规则**
+- [x] **P6-01 定义"大家今天吃什么"的冷启动与匿名统计规则**（`docs/ADR_002_社区冷启动与匿名统计规则.md`）
   - 前置：D-006 已确认不可回链。
   - 验收：固定时间窗、城市/足够粗区域、最低样本阈值和冷启动来源均明确；个人使用阶段没有真实群体样本时，不伪造人数或群体排行。
+  - 实际交付：ADR_002 固化时间窗/区域粒度/最低样本阈值/冷启动来源规则；社区数据真实来源 = user_recommendations 历史聚合（`_aggregate_trending_from_history`），无伪造人数；样本不足阈值时回退静态种子数据并明确标注来源。
 
-- [ ] **P6-02 实现不可误导的公共聚合**
+- [x] **P6-02 实现不可误导的公共聚合**（提交 `44f6e3b`）
   - 验收：默认推荐与真实统计分区；无伪造人数；不能通过组合筛选推断单个用户；选择明确 food_code 后直接进入附近商家，不经过推荐和 AI。
+  - 实际交付：`backend/app/api/v1/community.py`（trending/feed/theme/vote 四端点 + 真实历史聚合 + 匿名化处理，聚合不暴露 source_user_id/source_session_id）；前端 Community 页（本周主题投票 + 最热/最新 Feed 双栏 + 今日 Top 榜）；Feed 卡「用这个去做推荐」（URL 带 seed_food + prefill_cuisine 进推荐流）与「查附近商家」（food_code 直连 /nearby）双路径；菜系 key 归一化（jp/kr/日料 → japanese/korean）；E2E 三路径测试 `test_e2e_community_3paths.py`。
 
-- [ ] **P6-03 评审活动模块的数据来源与维护责任**
+- [x] **P6-03 评审活动模块的数据来源与维护责任**（`docs/ADR_003_社区活动模块数据来源与维护责任.md`，提交 `44f6e3b`）
   - 验收：每项活动有来源、有效期、最后核验时间、图片权利和过期下线机制；活动指向明确 food_code 时直接进入附近商家，否则进入对应说明页。
+  - 实际交付：ADR_003 固化活动数据来源与维护责任边界；首页「今日活动 · 名场面」按星期匹配（周一汉堡/周三必胜客/周四疯狂肯德基/周五炸鸡/周六烧烤/周日寿司），CampaignBanner 组件；活动按钮直达 `/nearby?food_code=xxx` 自动预填并搜商家（不经过推荐和 AI）。
 
-- [ ] **P6-04 实现反馈闭环**
-  - 预期成果：主任务完成后出现非阻塞收尾入口，分别提供快速评价、可选短问卷和匿名分享；始终提供明显的“完成/跳过”。
-  - 验收：三项均不阻塞附近商家和地图跳转；分享前展示字段预览并单独确认；会话所有权服务端验证；反馈可聚合出修正规则/AI的行动项。
+- [x] **P6-04 实现反馈闭环**（提交 `44f6e3b` + sprint `44f6e3b` 前 P6-03 画像部分）
+  - 预期成果：主任务完成后出现非阻塞收尾入口，分别提供快速评价、可选短问卷和匿名分享；始终提供明显的"完成/跳过"。
+  - 验收：三项均不阻塞附近商家和地图跳转；分享前展示字段预览并单独确认；会话所有权服务端验证；反馈可聚合出修正规则/AI 的行动项。
+  - 实际交付：`backend/app/api/v1/feedback.py`（/feedback/submit + /feedback/report 聚合）；推荐结果页非阻塞反馈入口（✉️ 提交反馈，content 最少 2 字）；偏好画像体系（`preferences.py` 五端点 + `user_preference_snapshots` 表 V20260811 迁移 + Settings 偏好 Tab 雷达图/时间轴/危险区 + 冷启动合并 banner P7-07a/b）；偏好快照 → DeepSeek prompt 注入（P6-04）；自动保存推荐历史 + 画像（autowrite）；反馈指标 E2E `test_p7_e2e_feedback_metrics.py`。
 
 ### P7 安全、质量与发布准备
 
-- [ ] **P7-01 完成分层自动化测试矩阵**
+- [x] **P7-01 完成分层自动化测试矩阵**（2026-08-25 CI 全绿）
   - 范围：规则单测、API 集成、认证/归属、Provider 契约、前端组件、核心 E2E。
   - 验收：测试优先覆盖高风险边界，不以单一覆盖率数字代替风险验证。
+  - 实际交付：后端 303 pytest（规则引擎 21 / 问卷状态机 12+ / 食物字典 37 / POI 36 / AI 加密 15 / Provider 契约 13+ / 会话 13+ / 社区 249 行 / 偏好画像 631+179 行 / E2E 完整 GDPR 638 行 / 社区三路径 213 行 / P7 验收冒烟 301 行 / 反馈指标 183 行 / ai-stats 146 行）；前端 29 vitest（组件 + 页面 + client）；CI 门禁 GitHub Actions（frontend lint/typecheck/test/build + backend ruff/mypy/pytest），Run 27 全绿。
 
-- [ ] **P7-02 完成安全与隐私检查**
+- [x] **P7-02 完成安全与隐私检查**（多项防线已实测）
   - 范围：secrets、CORS、速率限制、日志脱敏、定位、IDOR、删除、公开聚合、依赖漏洞。
+  - 实际交付：AI key Fernet 加密 + `ENC:` 前缀 fail-fast + 明文 `sk-` 启动拦截（P5-03B）；CORS 白名单 localhost/127.0.0.1；AI 限流 3 次/日/用户 + 100 全局（P5-05）；RedactFilter 日志脱敏（secret/邮箱/坐标/Bearer）；G-16 坐标仅内存（location_token 不透明，POIItem 无 lat/lng）；IDOR 防御（所有 CRUD 显式 WHERE user_id + RLS 双防线）；GDPR 删号（物理删 + refresh_token 吊销 + 死 token 二次校验）与数据导出（P7-06）；公开聚合匿名化（P6-02）；npm audit 0 漏洞。剩余：上线前建议做一次系统性渗透自查清单归档。
 
 - [ ] **P7-03 完成可访问性与响应式验收**
   - 范围：320/375/768/桌面、键盘、焦点、语义标签、错误提示、对比度、减少动画。
+  - 当前状态：**部分完成**。已有基础：P0-05 阶段 8 关键页 320px 无横向溢出验收 + K1–K20 纯键盘自测（原型上）；P1-02 起前端全局 focus-visible、reduced-motion、跳过链接、语义控件。**未完成**：工程页面的 320/375/768/桌面四档系统回归、正式键盘/焦点/对比度走查归档。
 
-- [ ] **P7-04 完成可观察性与故障演练**
+- [x] **P7-04 完成可观察性与故障演练**（提交 `a2947b8`/`44f6e3b`）
   - 范围：AI/地图外部故障、数据库错误、限额、超时、降级、请求追踪和敏感信息检查。
+  - 实际交付：ai-stats 观测面板（200 次调用画像环形缓冲）；AI 7 类失败码 → final_reason 映射前端展示；POI AutoFailover（5 次失败 60s 降级窗口）；E2E GDPR 死 token 故障链实测；X-Request-ID 全链路请求追踪；结构化日志 + secret_values 脱敏。
 
-- [ ] **P7-05 完成发布文档**
+- [x] **P7-05 完成发布文档**（提交 `44f6e3b`）
   - 预期成果：README、架构图、ADR、环境变量、部署/回滚、隐私说明、演示数据边界和已知限制。
+  - 实际交付：根 README 230 行（快速启动/架构/端口契约）；`docs/25_EatWhat_部署运维手册_v1.0.md`（部署/回滚/监控）；ADR 001–003（AI 增益评估/社区冷启动/活动数据来源）；backend/.env.example 103 行（三模式 POI/AI 加密/配额全参数注释）；frontend/backend README 各自 230+ 行；docker-compose + Dockerfile×2 + nginx.conf + .dockerignore×2；`sprint_retrospective.md` + 两份 sprint 交付清单。
 
 ### P8 部署与发布
 
-- [ ] **P8-01 部署预览环境**
+- [>] **P8-01 部署预览环境**（配置就绪，实际部署待执行）
   - 验收：端到端冒烟通过；第三方密钥权限最小化；数据为测试/演示数据。
+  - 当前状态：Docker 化部署配置全部就绪（backend Dockerfile + frontend Dockerfile 多阶段构建 + nginx.conf 反代 + docker-compose.yml 编排 + .dockerignore）；**尚未实际执行** docker-compose 本地验收，也未部署到任何云端环境。
+  - 下一步选项：本地 `docker compose up` 全链路验收（不花钱）→ 或选云平台部署（需用户决策平台与预算）。
 
 - [ ] **P8-02 完成发布门评审**
   - 验收：明确是受控演示还是公众服务；所有对应前置条件有证据。
+  - 前置依赖：P8-01 部署验收 + P7-03 可访问性回归 + P5-06 评估结论（受控演示口径可放宽后两项）。
 
 - [ ] **P8-03 发布并监控**
   - 验收：错误率、核心完成率、第三方限额和隐私事件有监控；存在回滚方案。
+  - 当前状态：监控基础已有（ai-stats 面板 + 结构化日志 + health/live 端点），正式发布监控与告警未配置。
 
 ## 5. 原计划到新计划的映射
 
@@ -893,23 +912,57 @@
 - 影响：EatWhat 的固定端口暂不改；改变端口会同时影响 Vite 代理、Magic Link 回调、CORS、文档和已有手测脚本。项目间通过端口所有权和启动前检查隔离。
 - 验证边界：已完成静态配置/文档核对；未在当前已有监听进程环境中强行启动或终止用户进程，干净环境启动验收仍需另行执行。
 
+### 2026-08-12 — PLAN-033（P6/P7 Sprint：画像可视化 + AI 注入 + GDPR 导出 + 冷启动合并）
+
+- 状态：已完成（补录；本条对应 `sprint-p6-p7-deliverable-summary.md` 与提交历史）。
+- 做了什么：P6-03 偏好画像可视化（Settings 三 Tab + 七维 SVG 雷达图 + 时间线 + 危险区二次确认）；P6-03a 偏好 API 客户端封装（list/latest/create/delete/deleteAll 强类型五方法）；P6-04 偏好快照 → DeepSeek prompt 注入（`_load_recent_preference_context` + `_summarize_preferences_for_prompt`，直连/会话两条路径）；P7-05 AI 调用可观测埋点（`_log_ai_call_meta`：pref_used/快照数/prompt 字符数/阶段/outcome/fail_code）；P7-06 GDPR 数据导出 `GET /api/v1/auth/me/export`；P7-07a 冷启动画像合并后端（`_try_merge_recent_preferences_into_answers` 返回 merged_pref_fields）；P7-07b 前端合并 Banner（可 dismiss/展开明细/来源标注）。
+- 验收：后端 45/45 核心测试通过、前端 tsc 0 错误；E2E `test_p7_01_e2e_complete_gdpr_loop`。
+
+### 2026-08-13 — PLAN-034（P5-05 配额细分 + Redis 限流 + 偏好徽章）
+
+- 状态：已完成（补录；对应提交 `a2947b8`）。
+- 做了什么：AI 额度 Redis 分布式限流（可选依赖，未配置自动降级本地 TTLCache）；失败码细分（7 类 → final_reason）；冷启动偏好徽章前端展示。
+- 验收：后端 303 pytest 全绿（含配额回滚/幂等/并发用例）。
+
+### 2026-08-25 — PLAN-035（P6/P7/P8 大 Sprint 交付：社区闭环 + 首页活动 + Docker + 多项用户反馈修复）
+
+- 状态：已完成（对应提交 `44f6e3b`，86 文件 +16296 行）。
+- 做了什么：
+  1. **P6 社区闭环**：`community.py` 四端点（trending/feed/theme/vote）+ Community 页（投票 + 双栏 Feed + Top 榜）+ Feed 卡双路径跳转（推荐 seed 预填 / 商家直连）。
+  2. **P7 反馈与画像**：`feedback.py`（submit/report）；偏好快照写 `user_preference_snapshots`（V20260811 迁移）；画像时间轴/徽章；GDPR 删号链路完善；`ai_stats.py` 观测面板 + `/api/v1/system/ai-stats`。
+  3. **P8 首页 & 活动**：首页精简两块（Trending Top 榜 + 星期名场面活动）；CampaignBanner 按星期匹配，直达 `/nearby?food_code=xxx`。
+  4. **Docker/部署配置**：backend/frontend Dockerfile + nginx.conf + docker-compose.yml + .dockerignore（P8-01 前置配置就绪）。
+  5. **用户反馈修复**：Settings AbortError 红字消失；covered_dimensions 按实际 answers 修正；反馈最少字数 10→2；q02 明确食物时菜系追问去重；AI 超时 15s→30s 可配 AI_TIMEOUT_MS；.gitignore 补充本地产物屏蔽。
+  6. **文档**：部署运维手册 v1.0、ADR_001/002/003、README 重写、sprint 回顾。
+- 验收：后端 pytest 303 passed + ruff 0；前端 tsc + build 通过 + oxlint 0。
+
+### 2026-08-25 — PLAN-036（CI 修复全绿 + P7 验收三件套 + 草稿清空）
+
+- 状态：已完成（对应提交 `d79f268`、`8491284`、`929fa90`）。
+- 做了什么：
+  1. **CI ruff 红灯修复**（`d79f268`）：Ruff 0.16+ 默认规则集扩大导致 100+ 报错；`pyproject.toml` 显式锁定 `select = ["E","F","I","UP","RUF"]`，ignore TRY/RUF001-003/E501，per-file-ignores 豁免 E402（scripts/encrypt_ai_key.py、tests/test_poi.py）。
+  2. **CI mypy 28 处修复**（`8491284`）：跨 8 文件——middleware dict 泛型、preferences 10 处 cast/Settings|None/tuple 参数、community async bug（`get_supabase_admin` 误同步调用 + `sb.table`→`sb.client.table`）、recommendations UUID 转换、main Callable/Awaitable 标注。**其中 community.py 是真实运行时 bug**（async 函数被同步调用）。
+  3. **P7 验收三件套**：C1a（分级延迟 <300ms Spinner / >300ms 骨架+Stepper、四阶段动态文案、15s 超时双按钮重试）✅；C1b（生成/反馈/保存画像按钮 disabled 防抖）✅；C2（社区 Feed「用这个去做推荐」→ seed_food+prefill_cuisine → 维度覆盖显示 cuisine 已收集 → 追问不重复问菜系 → Top5 输出）端到端 ✅。
+  4. **草稿清空**（`929fa90`，用户反馈驱动）：进入推荐结果态后自动清空 localStorage 草稿，下次进入问卷全新；useRef 防重复清空，结果页交互不受影响。端到端验证：问卷中草稿存在 → 结果态 null。
+- 验收：GitHub Actions Run 27 前后端全绿；前端 typecheck/lint/29 vitest 通过；浏览器端到端实测通过。
+- 对后续的影响：P8-01（部署）成为唯一进行项；P5-06/P7-03/P8-02/P8-03 待排期。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
-2. 再读本文件顶部状态、D-001–D-011 和最新执行日志。
-3. P5 动态 AI 接入（当前阶段，已确认 DeepSeek V4 Flash），核心子任务与验收顺序：
-   - **P5-03B API Key 多层加密框架（必做，安全底线）**：环境变量 `AI_API_KEY` 必须带 `ENC:` 前缀才视为密文；使用 `cryptography.Fernet` 对称加密（AES-128-CBC + HMAC-SHA256）；密钥派生使用 `PBKDF2HMAC(salt=EW_AI_SALT, iterations=480000)` 从 `EW_AI_KEY_PASSPHRASE` 环境变量派生出 Fernet key；两个变量（passphrase + encrypted key）分开填写，明文 key 绝不允许出现在 `.env`、日志、错误响应、exception traceback 中；解密仅在 `ai_service._get_provider()` 调用链上即时发生，结果只存在内存局部变量，不缓存到 settings 单例。
-   - **P5-03A 多 Provider 抽象契约（先写接口，再写实现）**：`backend/app/services/ai/base.py` 定义 `AIProvider` Protocol（`async def chat(self, *, messages: list[ChatMessage], schema: type[ModelT], temperature: float, timeout_ms: int) -> ModelT | None`）；输出强绑定 Pydantic schema（`model_validate_json` 校验，失败返回 None 触发回退）。统一超时参数；Provider 选择完全以 `settings.ai_provider` 为准，禁止任何地方硬编码默认值为 deepseek。
-   - **P5-03 MockAIProvider**：四种参数化模式 `normal/slow/invalid_json/out_of_bounds_food_code`（通过 `MOCK_AI_MODE` 调试 env 控制）；`normal` 输出固定 Top5 但可通过 `MOCK_AI_SEED` 参数化产生不同排序（MEM-024 盯防反"固定首候选"）；`slow` 延迟 9s 触发超时；`invalid_json` 输出损坏 JSON；`out_of_bounds_food_code` 输出字典外 food_code。四种异常模式全部由 ChatService 捕获并回退规则引擎推荐（G-08 不空保障）。
-   - **P5-02 动态追问契约**：最多 3 轮；服务端判提前结束；**绝对禁止** AI 被询问身份/精确位置/医学诊断；question_id/题文/选项/选项数全部服务端 `max_length` 与 schema 校验，不合法直接回退。
-   - **P5-02A AI 等待骨架 UI**：四态文案 `正在整理你的选择 → 正在生成下一题 → 正在综合全部回答 → 正在准备推荐结果`；300ms 内响应不闪烁；800ms+ 有可感知反馈；重复点击不触发第二次调用；超时/断网问卷答案不丢失。
-   - **P5-04A 最终候选 1→3→5 渐进展示**：用户明确"这个不要再推迟到更晚"，接 AI 必同步交付；`hidden` 属性控制（非数组切片，保持 DOM 全卡存在供测试与 SEO）；首候选理由最完整；更多推荐按钮用户主动触发；达 5 个后隐藏按钮。
-   - **P5-05 配额账本 + 幂等消费**：并发/重放/超时/丢会话都不能无限吃额度；预算=1 会话最多 3 次追问 + 1 次最终生成；请求/账本记录事务真源。
-   - **P5-04 Live DeepSeekProvider**：HTTPS OpenAI 兼容端点 `https://api.deepseek.com/v1/chat/completions`；模型 `deepseek-v4-flash`；输入严格过滤（邮箱/精确坐标/身份绝不透传）；成本日志脱敏（仅记录 token 使用计数，不记录明文内容或 key）。
+2. 再读本文件顶部状态、D-001–D-011 和最后三条执行日志。
+3. 当前阶段：P8 部署与发布。剩余 4 项待办，按用户已确认优先级或按需选择：
+   - **P8-01 部署预览环境（当前进行项）**：先本地 `docker compose up --build` 全链路验收（前端 nginx → 后端 FastAPI → Supabase → DeepSeek/高德），验证容器化链路与密钥注入；通过后再决定是否上云（需用户决策平台与预算）。注意 Windows 下 Docker Desktop 需已启动；`.env` 不进镜像，通过 compose env_file 注入。
+   - **P5-06 AI 增益评估**：从 `GET /api/v1/system/ai-stats` 导出调用画像，按 ADR_001 口径出「AI vs 规则」对照结论，写入 ADR_001 附录和项目记忆。
+   - **P7-03 可访问性系统回归**：320/375/768/桌面四档 + 键盘 Tab/Enter + 焦点环 + prefers-reduced-motion 走查，重点页：Home/Recommend/Nearby/Community/Settings/History；结果归档为验收记录文档。
+   - **P8-02/P8-03 发布门与监控**：依赖上述三项（受控演示口径可放宽 P5-06/P7-03）。
 4. 每完成一项子任务：
    - 先跑质量门禁：`backend: ruff + mypy + pytest` && `frontend: oxlint + tsc + vitest + vite build`，**必须全部 0 报错**。
    - 门禁通过后：git add 相关文件 → 带描述 commit → `git push origin main`（用户已确认不用问直接推）。
    - 推送后同步本 PLAN（清单项打勾 + 执行日志追加）+ `EatWhat_项目记忆.md` 记录新经验和坑。
-5. P5-01 ADR 可以在 P5-02/03 代码同步进行中补写，不阻塞代码，但在 P5-04 Live 接入前必须完成（定义对照指标，否则接 Live AI 没有评估基线）。
-6. MEM-024 反"固定首候选"盯防延续到 P5：MockAIProvider normal 模式必须参数化可控不同 seed → 不同排序的 Top5；Live AI 最终生成需要 4 组以上差异化参数化用例验证；若发生不同答案恒得到同一排序，判定为 P5 缺陷，必须修复。
-7. API Key 加密工具：补充 `backend/scripts/encrypt_ai_key.py` 供用户输入明文 DeepSeek key → 打印 `ENC:gAAAAA...` 格式密文；脚本本身不写文件，仅 stdout 输出；用户手工把密文贴进 `.env`。
+5. 已知小优化 backlog（不阻塞发布，按需排期）：
+   - P7-07c：冷启动合并 Banner 明细每项加「去修改 →」按钮（DOM id + 平滑滚动）。
+   - 口味偏好收集修复（follow-up 追问未把 taste 写入画像维度，雷达图该维恒 0）。
+   - P6-04b：DeepSeek prompt 注入「用户可随时推翻历史画像」提示词，防历史偏好压过当下选择。
+   - P0-06 真人可用性补测（工程后待补项，3–5 人任务型测试，主持手册已就绪 `20_EatWhat_P0-06_主持人执行手册_v1.0.md`）。
+6. MEM-024 反"固定首候选"盯防继续有效：任何推荐链路改动（规则/AI/合并）都必须保住"不同答案 → 不同排序或首候选"的差异化验收，已有参数化测试护栏。

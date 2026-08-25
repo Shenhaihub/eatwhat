@@ -1,8 +1,8 @@
 # EatWhat 项目记忆
 
 > 用途：为长期 Codex 协作提供高精度、可恢复的项目上下文。  
-> 最后更新：2026-08-24  
-> 状态：P2 混合自适应问卷与规则候选垂直切片；P2-01 食物字典与 schema 完成（15/50），P2-02 规则引擎（16/50）完成，P2-03 状态机（17/50）完成；下一步切换为 P2-03A Questionnaire Decision Engine 与 next API（待用户确认）。  
+> 最后更新：2026-08-25  
+> 状态：功能开发已收官（P0–P7 主体全部完成，45/50 清单项关闭）；DeepSeek V4 Flash Live AI 实测可用；社区/活动/反馈/偏好画像闭环上线；CI 全绿（后端 303 pytest + ruff 0 + mypy 0；前端 29 vitest + tsc 0 + oxlint 0）。当前阶段 **P8 部署与发布**：Docker 配置就绪待本地 compose 验收；剩余待办 P5-06（AI 增益评估结论）、P7-03（可访问性四档系统回归）、P8-02/03（发布门与监控）。详细执行日志见 `EatWhat_实施计划与状态.md` PLAN-033~036。  
 > 注意：本文件记录"事实、已确认决策、建议和待定项"，不能把 Codex 建议误写成用户已经确认的结论。
 
 ## 0.1 本地开发地址与端口隔离（2026-08-24）
@@ -42,11 +42,8 @@
 - 项目名：EatWhat。
 - 形态：响应式 Web 优先，兼容移动端和桌面端。
 - 当前目录：`D:\A622\项目\AgentWork\project0717`（2026-08-03 复制后的工作区；原路径 `D:\A622\项目\project0717` 仍存在，两处内容一致）。
-- 当前仓库事实：已有 `docs/`、`prototype/eatwhat-p0/` 可点击原型，以及 `frontend/`（React/Vite/TS 前端壳）和 `backend/`（FastAPI 后端壳）。截至 2026-08-04 已在本工作区 `git init`（main 分支），现有 13 个提交；GitHub 远端 `https://github.com/Shenhaihub/eatwhat`（private）已建立并同步；origin/main 与本地完全一致；CI 连续 5 次实跑全绿。P2 交付物已入库：
-  - **P2-01**：`backend/app/schemas/enums.py` + `food.py`（枚举/问卷答案/食物字典/推荐候选/校验器/入口意图）；`backend/app/data/food_dictionary_v1.0.json`（15 条启用字典）；`backend/app/repositories/food_dictionary.py`（内存只读仓库，加载即校验）；`backend/tests/test_food_dictionary.py`（37 用例）；`frontend/src/services/api/types/`（enums/food/index 三件套，1:1 后端）。
-  - **P2-02**：`backend/app/services/rule_engine.py`（规则引擎，正好 5 条候选 + 稳定排序 + G-08 不空 + G-12 差异化）；`backend/tests/test_rule_engine.py`（21 用例）。
-  - **P2-03**：`backend/app/data/question_bank_v1.0.json`（6 题 3 基 3 自适应，G-11 不询问医学过敏原）；`backend/app/schemas/questionnaire.py`（9 件 schema，全部 extra=forbid）；`backend/app/services/questionnaire_state.py`（状态机：load_question_bank / recompute_questionnaire / draft round-trip 三件套，纯函数，无账号/DB 依赖，未登录可完成）；`backend/tests/test_questionnaire_state.py`（12 用例：完整性/修改早期答案失效/草稿/稳定输出/加载校验）。
-- 当前阶段：P0（产品/原型/技术文档收敛）已完成；P1（工程骨架）已完成（14/50）；P2 混合自适应问卷与规则候选垂直切片（P2-01 完成 15/50，P2-02 完成 16/50，P2-03 完成 17/50）。尚未接入 next API、数据库、认证、AI、地图与业务功能；不能称为"产品功能已开发"。
+- 当前仓库事实：已有 `docs/`、`prototype/eatwhat-p0/` 可点击原型，以及完整的 `frontend/`（React/Vite/TS：Home/Recommend/Community/Nearby/History/Settings/Login/AuthCallback 全页面 + 偏好画像组件）和 `backend/`（FastAPI：问卷/推荐/AI 会话/位置/POI/社区/反馈/偏好/系统全模块）。GitHub 远端 `https://github.com/Shenhaihub/eatwhat`（private）持续同步；CI（GitHub Actions 前后端双 job）全绿，最新通过 Run 27。早期 P2 交付物（食物字典/规则引擎/问卷状态机）至今仍是核心基座，后续里程碑在其上增量扩展。
+- 当前阶段（2026-08-25）：P0–P7 主体全部完成（45/50）：P5 动态 AI（DeepSeek V4 Flash 实测可用、Fernet 加密、配额限流）、P6 社区/活动/反馈/偏好画像、P7 测试矩阵/安全/可观测/发布文档均闭环。剩余：P8-01 部署验收（Docker 配置就绪）、P5-06 AI 增益评估结论、P7-03 可访问性四档回归、P8-02/03 发布门与监控。
 - 用户背景：Python 有基础，但整体仍是全栈初学者；主要使用 Windows，希望依赖 Codex 逐步完成第一个完整项目。
 - 项目双重目标：做出真实可用的产品，同时形成结构完整、可以展示工程能力的 GitHub 作品。
 
