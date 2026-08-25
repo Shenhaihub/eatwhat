@@ -859,6 +859,18 @@ export default function Recommend() {
   const isComplete = result?.is_complete ?? false;
   const isResultView = recState.items !== null;
 
+  // P7-08：成功生成推荐（进入结果态）后清空 localStorage 草稿。
+  // 目的：用户每次进入 /recommend 都从未答状态开始，避免"上次的答案"残留。
+  // 只清存储不清内存 answers —— 结果页的交互（1→3→5 展开、反馈、保存画像）仍正常。
+  // 用 useRef 防止结果态期间多次重渲染触发重复清空（幂等，无副作用）。
+  const draftClearedForResultRef = useRef(false);
+  useEffect(() => {
+    if (isResultView && !draftClearedForResultRef.current) {
+      if (typeof window !== 'undefined') window.localStorage.removeItem(DRAFT_KEY);
+      draftClearedForResultRef.current = true;
+    }
+  }, [isResultView]);
+
   const handleResetDraft = useCallback(
     (e?: FormEvent | React.MouseEvent) => {
       e?.preventDefault?.();
