@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.exceptions import RequestValidationError
@@ -323,7 +324,7 @@ async def recommendations_generate(
     chat_service = getattr(mgr, "_chat_service", None)
     quota_info: dict[str, int]
     if chat_service is not None and hasattr(chat_service, "peek_quota"):
-        quota_info = chat_service.peek_quota(user_id=quota_user_id)  # type: ignore[attr-defined]
+        quota_info = chat_service.peek_quota(user_id=quota_user_id)
     else:
         quota_info = {
             "user_used": 0,
@@ -496,7 +497,9 @@ def _try_merge_recent_preferences_into_answers(
     try:
         from app.api.v1.preferences import load_recent_preference_snapshots
 
-        snaps = load_recent_preference_snapshots(sb=sb, user_id=current_user.user_id, limit=3)
+        snaps = load_recent_preference_snapshots(
+            sb=sb, user_id=UUID(str(current_user.user_id)), limit=3
+        )
     except Exception as exc:
         log = logging.getLogger("app.api.v1.recommendations")
         log.warning("preference_merge_load_fail user=%s err=%r", current_user.user_id, exc)
@@ -634,7 +637,9 @@ def _hydrate_session_preference_context(
             summarize_preference_snapshots_for_prompt,
         )
 
-        snaps = load_recent_preference_snapshots(sb=sb, user_id=current_user.user_id, limit=limit)
+        snaps = load_recent_preference_snapshots(
+            sb=sb, user_id=UUID(str(current_user.user_id)), limit=limit
+        )
         summary = summarize_preference_snapshots_for_prompt(snaps)
         session.preference_context = summary
         # P7-05：实际合并条数（summary 非空才算有效合并；空串意味着"有快照但无有效总结"，count 保留原值 0）
@@ -885,7 +890,7 @@ async def recommendations_session_start(
         resp.used_ai = bool(session.final_reason == "ai_gain")
         chat_service = getattr(mgr, "_chat_service", None)
         if chat_service is not None and hasattr(chat_service, "peek_quota"):
-            resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)  # type: ignore[attr-defined]
+            resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)
         else:
             resp.ai_quota = {
                 "user_used": 0,
@@ -900,7 +905,7 @@ async def recommendations_session_start(
     # P5-07：follow_up 阶段也给一份额度（前端开关上方展示 "今日 X/3" 让用户知道还有多少）
     chat_service = getattr(mgr, "_chat_service", None)
     if chat_service is not None and hasattr(chat_service, "peek_quota"):
-        resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)  # type: ignore[attr-defined]
+        resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)
     return resp
 
 
@@ -1052,7 +1057,7 @@ async def recommendations_session_answer(
     quota_user_id = session.user_id
     chat_service = getattr(mgr, "_chat_service", None)
     if chat_service is not None and hasattr(chat_service, "peek_quota"):
-        resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)  # type: ignore[attr-defined]
+        resp.ai_quota = chat_service.peek_quota(user_id=quota_user_id)
     else:
         resp.ai_quota = {
             "user_used": 0,

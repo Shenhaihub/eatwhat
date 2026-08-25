@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 from collections import deque
+from typing import Any
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -39,7 +40,7 @@ class RequestMetrics:
                 self._error_requests += 1
             self._recent_latencies.append(duration_ms)
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> dict[str, Any]:
         with self._lock:
             latencies = list(self._recent_latencies)
             total = self._total_requests

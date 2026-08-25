@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 import httpx
 import jwt as pyjwt
@@ -511,7 +511,7 @@ async def export_account_data(
         "role": current.role,
     }
     try:
-        admin_user = sb_ok.client.auth.admin.get_user(uid)
+        admin_user = sb_ok.client.auth.admin.get_user(uid)  # type: ignore[attr-defined]
         u = getattr(admin_user, "user", admin_user)
         # 同时兼容 dict（测试用 mock 常见）和 Pydantic 对象（Supabase 真实返回）
         if isinstance(u, dict):
@@ -553,7 +553,7 @@ async def export_account_data(
             .order("created_at", desc=True)
             .execute()
         )
-        history_items = list(res.data or [])
+        history_items = cast(list[dict[str, Any]], list(res.data or []))
     except Exception as exc:
         partial.append(f"history_fetch_error: {type(exc).__name__}")
         log.warning("account_export_history_skip user=%s err=%r", current.user_id, exc)
@@ -568,7 +568,7 @@ async def export_account_data(
             .order("created_at", desc=True)
             .execute()
         )
-        pref_items = list(res.data or [])
+        pref_items = cast(list[dict[str, Any]], list(res.data or []))
     except Exception as exc:
         partial.append(f"preference_fetch_error: {type(exc).__name__}")
         log.warning("account_export_preference_skip user=%s err=%r", current.user_id, exc)

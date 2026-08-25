@@ -17,7 +17,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -120,8 +120,8 @@ _REPORT_REASONS: dict[str, str] = {
 class _FeedbackStore:
     """进程内反馈存储（MVP）。"""
 
-    feedbacks: list[dict] = field(default_factory=list)
-    reports: list[dict] = field(default_factory=list)
+    feedbacks: list[dict[str, Any]] = field(default_factory=list)
+    reports: list[dict[str, Any]] = field(default_factory=list)
     # 反馈 ID 计数器
     _id_counter: int = 0
     # 用户冷却（防止刷反馈）：user_id -> last_submit_time

@@ -310,24 +310,26 @@ _FOOD_CODE_TO_CUISINE: dict[str, str] = {
 }
 
 
-def _aggregate_trending_from_history() -> list[tuple[str, str, int]]:
+async def _aggregate_trending_from_history() -> list[tuple[str, str, int]]:
     """从 Supabase history 表聚合今日推荐 Top 榜。
 
     返回: [(food_code, cuisine_tag, recommended_today), ...]
     """
     try:
-        from app.core.supabase_client import get_supabase_admin
+        from app.core.config import get_settings
+        from app.core.supabase_client import SupabaseAdminClient, _build_admin_client
 
-        sb = get_supabase_admin()
-        if sb is None:
+        admin_client = _build_admin_client(get_settings())
+        if admin_client is None:
             return []
+        sb = SupabaseAdminClient(client=admin_client, settings=get_settings())
 
         today = datetime.now().date().isoformat()
         result = (
-            sb.table("history")
+            sb.client.table("history")
             .select("food_code")
             .gte("created_at", today)
-            .not_is("food_code", "null")
+            .not_is("food_code", "null")  # type: ignore[attr-defined]
             .execute()
         )
 
@@ -431,7 +433,7 @@ async def get_community_trending() -> TrendingResponse:
     - mixed：真实数据 + Seed 填充（1-4 条真实记录）
     - seed：纯示例数据（无真实记录）
     """
-    real_data = _aggregate_trending_from_history()
+    real_data = await _aggregate_trending_from_history()
     items, data_source, is_example = _build_trending_items(real_data, _TRENDING_SEED)
     return TrendingResponse(
         as_of=_now_utc(),

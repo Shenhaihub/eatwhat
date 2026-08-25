@@ -155,8 +155,8 @@ class ChatService:
             user_key = f"{day}:{user_id}" if user_id else None
             global_key = day
             if user_key is not None:
-                user_used = int(rl._user_cache.get(user_key, 0) or 0)  # type: ignore[attr-defined]
-            global_used = int(rl._global_cache.get(global_key, 0) or 0)  # type: ignore[attr-defined]
+                user_used = int(rl._user_cache.get(user_key, 0) or 0)
+            global_used = int(rl._global_cache.get(global_key, 0) or 0)
         return {
             "user_used": user_used,
             "user_limit": user_limit,

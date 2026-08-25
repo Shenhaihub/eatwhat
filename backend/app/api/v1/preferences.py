@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -124,7 +124,7 @@ def load_recent_preference_snapshots(
     except Exception as exc:
         log.warning("preference_load_fail user=%s err=%r", user_id, exc)
         return []
-    return [_row_to_response(r) for r in res.data]
+    return [_row_to_response(cast(dict[str, Any], r)) for r in res.data]
 
 
 def write_user_preference_snapshot(
@@ -190,7 +190,7 @@ def write_user_preference_snapshot(
 
     if not result.data:
         raise AppError(INTERNAL_ERROR, message="写入偏好画像失败（DB 无返回）")
-    return _row_to_response(result.data[0])
+    return _row_to_response(cast(dict[str, Any], result.data[0]))
 
 
 def _row_to_response(row: dict[str, Any]) -> PreferenceSnapshotResponse:
@@ -218,7 +218,7 @@ def create_preference_snapshot(
     current: Annotated[CurrentUser, Depends(get_current_user)],
     payload: PreferenceWriteRequest,
     sb: Annotated[SupabaseAdminClient | None, Depends(get_supabase_admin)] = None,
-    _settings: Annotated[Settings, Depends(get_settings)] = None,
+    _settings: Annotated[Settings | None, Depends(get_settings)] = None,
 ) -> PreferenceSnapshotResponse:
     sb_ok = _require_sb(sb)
     log.info(
@@ -276,7 +276,9 @@ def list_preference_snapshots(
             .execute()
         )
         # 合并两段，再按 (created_at desc, id desc) 整体排一次
-        all_rows: list[dict[str, Any]] = list(raw.data or []) + list(extra_raw.data or [])
+        all_rows: list[dict[str, Any]] = cast(
+            list[dict[str, Any]], list(raw.data or []) + list(extra_raw.data or [])
+        )
         all_rows.sort(
             key=lambda r: (
                 _sort_key_dt(r.get("created_at")),
@@ -315,11 +317,11 @@ def list_preference_snapshots(
         .range(offset, offset + limit - 1)
         .execute()
     )
-    rows = list(items_res.data or [])
+    rows = cast(list[dict[str, Any]], list(items_res.data or []))
     items = [_row_to_response(r) for r in rows]
     # P7-02：offset 模式下也产出 next_cursor，便于前端首屏之后无缝用 cursor 翻页
     has_more = total > offset + len(items)
-    next_cursor: str | None = None
+    next_cursor = None
     if has_more and rows:
         last = rows[-1]
         try:
@@ -336,14 +338,14 @@ def list_preference_snapshots(
     )
 
 
-def _sort_key_dt(v: Any) -> tuple:
+def _sort_key_dt(v: Any) -> tuple[Any, ...]:
     # datetime iso 字符串字典序等于时间序（UTC/带 tz 都成立），空排最后
     if not v:
         return ()
     return (v,)
 
 
-def _sort_key_str(v: Any) -> tuple:
+def _sort_key_str(v: Any) -> tuple[Any, ...]:
     if not v:
         return ()
     return (str(v),)
@@ -397,7 +399,7 @@ def get_latest_snapshot(
     )
     if not res.data:
         raise AppError(NOT_FOUND, message="还没有偏好画像记录")
-    return _row_to_response(res.data[0])
+    return _row_to_response(cast(dict[str, Any], res.data[0]))
 
 
 @router.delete("/{snapshot_id}", status_code=status.HTTP_204_NO_CONTENT)
