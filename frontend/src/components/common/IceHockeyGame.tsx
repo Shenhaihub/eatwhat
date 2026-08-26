@@ -238,13 +238,13 @@ export default function IceHockeyGame() {
       c.arc(s.ball.x, s.ball.y, s.ball.r, 0, Math.PI * 2);
       c.fill();
 
-      // 发球指示箭头
+      // 发球指示箭头：从发球板上的球位置指出发球角度
       if (s.phase === 'serve') {
         const dirY = s.server === 'player' ? -1 : 1;
         const dx = Math.sin(s.serveAngle);
         const dy = dirY * Math.cos(s.serveAngle);
-        const cx = W / 2;
-        const cy = H / 2;
+        const cx = s.ball.x;
+        const cy = s.ball.y;
         const len = 40;
         c.strokeStyle = '#ff9f43';
         c.lineWidth = 3;
