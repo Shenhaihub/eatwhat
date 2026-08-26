@@ -42,7 +42,7 @@ const BALL_R = 7;
 const MAX_ANGLE = (60 * Math.PI) / 180; // 摆动角度 ±60°
 const SWING_SPEED = 1.6; // 摆动角速度（rad/s）
 const PLAYER_SPEED = 320;
-const AI_SPEED = 200;
+const AI_SPEED = 280;
 const WIN_SCORE = 7;
 const AI_SERVE_TARGET = 0.55; // AI 发球角（弧度，±幅度的比例）
 
@@ -204,11 +204,18 @@ export default function IceHockeyGame() {
 
     const bounceX = (s: GameState, offset: number): void => {
       // 依据击中挡板的相对位置改变横向速度（边缘更斜），并保持整体球速不变
-      const rel = clamp(offset / (s.player.w / 2), -1, 1);
-      const maxX = (s.speed * 0.7);
-      s.ball.vx = clamp(rel * maxX, -maxX, maxX);
-      const sp = Math.hypot(s.ball.vx, s.ball.vy) || 1;
-      s.ball.vx = (s.ball.vx / sp) * s.speed;
+      const half = s.player.w / 2;
+      const rel = clamp(offset / half, -1, 1);
+      const maxX = s.speed * 0.85;
+      let vx = rel * maxX;
+      // 命中中心附近时给一个随机方向的基础斜度，避免回球笔直、毫无趣味
+      if (Math.abs(vx) < s.speed * 0.12) {
+        vx = (Math.random() < 0.5 ? -1 : 1) * s.speed * 0.18;
+      }
+      vx = clamp(vx, -maxX, maxX);
+      // 归一化，保证球速恒定（速度滑块决定）
+      const sp = Math.hypot(vx, s.ball.vy) || 1;
+      s.ball.vx = (vx / sp) * s.speed;
       s.ball.vy = (s.ball.vy / sp) * s.speed;
     };
 
