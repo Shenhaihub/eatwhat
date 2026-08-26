@@ -31,6 +31,12 @@ COPY index.html tsconfig*.json vite.config.ts .oxlintrc.json .prettierrc.json .p
 COPY src ./src
 COPY public ./public
 
+# 建期注入（Fly.io 等远程部署用）：让前端 /api 直接打到后端公网地址，绕过本地 nginx 反代。
+# 默认留空 → 前端走相对路径 /api/v1（本地 compose / dev 的 nginx 反代或 vite proxy 场景）。
+# 用法：docker build --build-arg VITE_API_BASE_URL=https://xxx.fly.dev/api/v1 .
+ARG VITE_API_BASE_URL=""
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # 生产构建：tsc -b + vite build → dist/
 #   VITE_API_BASE_URL 等运行期 VITE_* 变量默认不用传（按相对路径），CI 要传就 docker build --build-arg
 RUN npm run build

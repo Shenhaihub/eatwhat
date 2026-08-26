@@ -1,0 +1,46 @@
+# =============================================================================
+# EatWhat Backend · Fly.io 部署模板（参考）
+# =============================================================================
+# 说明：
+#   1. 这是「参考模板」，实际请先用 `fly launch` 在 backend/ 目录生成 fly.toml，
+#      再按下方注释修改关键字段（app 名 / region / internal_port / healthcheck）。
+#   2. 敏感配置一律走 `fly secrets set`，**不要**写进 fly.toml 或仓库任何文件：
+#         fly secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+#                        AI_API_KEY=ENC:... EW_AI_KEY_PASSPHRASE=... \
+#                        AMAP_API_KEY=... REDIS_URL=...
+#   3. 公开部署必须启用真实服务：APP_MODE=live、AI_PROVIDER=deepseek、POI_PROVIDER=auto。
+#      （写入下方 [env] 或 fly secrets；这里放非敏感默认值。）
+#   4. 前端通过公网跨域调用本后端，因此本 app 需要暴露公网端口。
+#      Fly 默认给 shared IPv4（免费）；如需专用 IPv4（+$2/月）用 `fly ips allocate-v4 --private=false`。
+# =============================================================================
+
+app = "eatwhat-backend"
+primary_region = "sin"        # sin=新加坡，nrt=东京；离大陆较近，首次验证建议 sin
+
+[build]
+  dockerfile = "Dockerfile"
+  target = "runtime"          # 与 docker-compose.yml 的 build.target 保持一致
+
+[env]
+  APP_ENV = "production"
+  APP_MODE = "live"           # 生产必须 live（启用 Supabase/高德/DeepSeek）
+  AI_PROVIDER = "deepseek"    # mock/deepseek/auto
+  POI_PROVIDER = "auto"       # mock/live/auto
+  # CORS 白名单：必须包含前端 Fly 域名（跨域调用需要）；可加仓库自定义域名
+  FRONTEND_ORIGINS = "https://eatwhat-frontend.fly.dev,http://localhost:8080"
+  AI_TIMEOUT_MS = "30000"
+
+# 后端仅对前端 / 健康检查开放，不需要对外暴露全部端口；internal_port 固定 8000
+[[http_service]]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"     # 按需建议：低流量可省成本
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "20s"
+    method = "GET"
+    timeout = "3s"
+    path = "/health/live"

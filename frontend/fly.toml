@@ -1,0 +1,39 @@
+# =============================================================================
+# EatWhat Frontend · Fly.io 部署模板（参考）
+# =============================================================================
+# 说明：
+#   1. 「参考模板」；实际先用 `fly launch` 在 frontend/ 目录生成 fly.toml 再改。
+#   2. Fly 上 nginx 无法解析本地的 `backend:8000`（那是 docker-compose 服务名）。
+#      因此前端改用「构建期注入 VITE_API_BASE_URL 指向后端公网地址 + 跨域 CORS」，
+#      前端所有 /api 请求会直接打到后端 Fly 域名，不再走 nginx 反代。
+#      ⚠️ 必须与 backend 的 FRONTEND_ORIGINS 白名单配对，否则会被 CORS 拦。
+#   3. [build.args] 注入 VITE_API_BASE_URL；需先向后端 app 分配公网 IP 并拿到其 fly.dev 域名。
+#   4. 若希望保留 nginx 反代（同源、免 CORS），需把 nginx.conf 上游改为后端 flycast 地址，
+#      并把本模板改回相对 /api 路径——两者只能选其一，本模板默认采用「跨域直连」。
+# =============================================================================
+
+app = "eatwhat-frontend"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+  target = "runtime"
+
+  # 构建期注入的外部服务地址；`/api` 前缀不可省（后端路由本身就是 /api/v1/*）
+  [build.args]
+    VITE_API_BASE_URL = "https://eatwhat-backend.fly.dev/api/v1"
+
+[[http_service]]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # 前端 nginx 容器内置 healthcheck（wget /index.html）
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "20s"
+    method = "GET"
+    timeout = "3s"
+    path = "/"

@@ -147,6 +147,60 @@ Vite dev server 已配置 `/api/*` 代理到 `http://127.0.0.1:8000`，无需跨
 
 **Windows 一键启动**：双击 `start-dev.bat`。
 
+## ☁️ 公有云部署（公开站点）
+
+> 项目默认以 Mock 模式运行（零密钥、零成本）。要发布成公开站点，需接入真实第三方 key + 一个公网托管。以下对比两种最省钱的路径。
+
+### 方案对比
+
+| 维度 | A. Fly.io 托管（推荐，先验证） | B. 国内云服务器 + Docker Compose |
+|---|---|---|
+| 前置 | Fly 账号 + 信用卡 + flyctl | 服务器 + 域名 + **ICP 备案**（1-3 周） |
+| 上线速度 | 当天 | 备案后 1 天 |
+| 成本 | 约 **$5-8/月（≈¥38-60）** | 首年 ¥99/年，续费 ¥300-600/年 |
+| HTTPS | 自动 | 需配 certbot/Caddy |
+| 运维 | 托管 | 自行监控/备份 |
+| 大陆可达性 | 需实测（新加坡/东京节点偏慢） | 最快最稳 |
+| Supabase | 海外调用稳定，大陆用户登录可能慢 | 大陆连 Supabase 更不稳（需评估迁移） |
+
+> **结论**：先选 **Fly.io（新加坡 `sin` / 东京 `nrt` 节点）** 免备案快速上线，用 fly.dev 子域名或自定义域名做小流量验证；若大陆用户登录太慢再迁国内服务器。
+
+### Fly.io 部署步骤
+
+```powershell
+# 0. 安装 flyctl 并登录
+npm i -g @fly.io/ctl 或 curl -L https://fly.io/install.sh | sh
+fly auth signup   # 或 fly auth login
+
+# 1. 后端（先部署，因为前端要引用它的地址）
+cd backend
+fly launch --no-deploy        # 生成 fly.toml（按仓库内模板核对关键字段）
+fly secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+               AI_API_KEY=ENC:... EW_AI_KEY_PASSPHRASE=... AMAP_API_KEY=... \
+               REDIS_URL=...
+fly deploy
+# 记下后端域名，例如 https://eatwhat-backend.fly.dev
+
+# 2. 前端（构建时注入后端公网地址）
+cd ../frontend
+# 把 frontend/fly.toml 里 [build.args] VITE_API_BASE_URL 改成你的后端域名
+fly launch --no-deploy
+fly deploy
+# 记下前端域名，例如 https://eatwhat-frontend.fly.dev
+
+# 3. 把前端域名加进后端 CORS（Fly 后端是 secrets/env，二选一）
+#    FRONTEND_ORIGINS=https://eatwhat-frontend.fly.dev,http://localhost:8080
+
+# 4. Supabase 控制台 → Authentication → URL Configuration
+#    Site URL / Redirect URLs 加入前端 fly.dev 域名，否则 Magic Link 登录回调失败
+```
+
+**关键适配点（务必阅读）**：
+- **nginx 反代失效**：Fly 上 frontend 的 nginx 无法解析 docker-compose 的服务名 `backend:8000`。本仓库默认采用「前端构建期注入 `VITE_API_BASE_URL` 直连后端公网 + 后端 CORS 放行前端域名」，**无需改源码**。
+- **CORS**：后端 `FRONTEND_ORIGINS` 必须包含前端 Fly 域名，且前端 fly.toml 的 `VITE_API_BASE_URL` 必须指向后端 `api/v1`。
+- **Redis**：公开多地/多实例时强烈建议 `fly secrets set REDIS_URL=...`，否则全局 AI 日限流会退化为进程内计数。
+- **云主机部署（备选，B 方案）**：直接把 `docker-compose.yml` 搬到云服务器，前端把 `backend:8000` 改为后端容器服务名即可；大陆节点约省 60% 成本但需备案。
+
 ## 🧪 质量门禁
 
 ```powershell

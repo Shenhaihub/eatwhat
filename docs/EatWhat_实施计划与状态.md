@@ -449,6 +449,10 @@
 - [ ] **P8-02 完成发布门评审**
   - 验收：明确是受控演示还是公众服务；所有对应前置条件有证据。
   - 前置依赖：P8-01 部署验收 ✓ + P7-03 可访问性回归 ✓ + P5-06 评估结论（受控演示口径可放宽此项）。
+  - 2026-08-26 进展：用户倾向「公开站点先上线验证」。已完成发布方案规划（详见本文档尾部 PLAN-052）：
+    - **推荐路径**：Fly.io（新加坡/东京节点，免备案、当天上线，约 $5-8/月 ≈ ¥38-60）先用小流量验证大陆可达性；若 Supabase 登录大陆太慢再迁国内服务器（需迁移 auth/DB，较大改造）。
+    - **已完成发布准备**：新建 `backend/fly.toml`、`frontend/fly.toml` 参考模板；前端 Dockerfile 支持 `VITE_API_BASE_URL` 构建期注入；后端 CORS 文档补充公开域名；README 新增「公有云部署」章节（含成本对比 + Fly 部署步骤 + 关键适配点）。
+    - **待用户执行**：创建 Fly 账号、`fly launch`/`fly deploy`、`fly secrets set`、Supabase 回调域名白名单、仓库设 Public。
 
 - [ ] **P8-03 发布并监控**
   - 验收：错误率、核心完成率、第三方限额和隐私事件有监控；存在回滚方案。
@@ -1041,6 +1045,22 @@
   - `frontend/src/services/api/types/{community,food}.ts`：添加 `food_name_zh` 类型字段
   - `frontend/nginx.conf`：反代超时调整
 - 对后续的影响：P0–P7 全部完成，P8-01 本地 Docker 验收通过。剩余 3 项：P5-06 AI 增益评估（需积累使用数据）、P8-02 发布门评审（需用户决策发布形态）、P8-03 发布监控。
+
+### 2026-08-26 — PLAN-052（P8-02 发布方案规划：公开站点上线路径 + 发布配置就绪）
+
+- 状态：P8-02 发布门进入方案规划阶段（用户在受控演示/公众服务中倾向「先上线验证」）。P8-02 仍待用户决策，暂标记 `[ ]`。
+- 做了什么：
+  1. **成本核实**（Fly.io 官网 Resource Pricing，2026-08）：
+     - Fly.io 最小配置（前端 256MB + 后端 512MB + shared IPv4 免费）≈ **$5–8/月（¥38–60）**；新用户**无永久免费 tier**（仅 ~$5 试用额度）。
+     - 国内云服务器（腾讯/阿里轻量 2C2G）首年 ¥99/年、续费 ¥300–600/年（¥25–50/月），但**需 ICP 备案**；大陆最快但连 Supabase 更不稳。
+  2. **关键适配点识别**：Fly 上 frontend nginx 无法解析 compose 服务名 `backend:8000` → 改用「前端构建期注入 `VITE_API_BASE_URL` 直连后端公网 + 后端 CORS 放行前端域名」，**不改源码**。
+  3. **发布配置交付**：
+     - 新建 `backend/fly.toml`、`frontend/fly.toml` 参考模板（占位 app 名/region，敏感值走 `fly secrets set`）。
+     - `frontend/Dockerfile`：新增 `ARG VITE_API_BASE_URL` + `ENV`，支持 Fly 构建期注入后端公网地址（默认留空不影响本地 compose/dev）。
+     - `backend/.env.example`：FRONTEND_ORIGINS 注释补充公开域名示例。
+     - `README.md`：新增「☁️ 公有云部署（公开站点）」章节，含方案对比表 + Fly 部署步骤 + 关键适配点 + 国内服务器备选。
+  4. **质量门禁**：仅改配置/文档 + 前端 Dockerfile 加 ARG（默认空），不影响现有构建链路；前端 Dockerfile 改动已核对（ARG 默认空 → 生产 dist 不变）。
+- 对后续的影响：用户创建 Fly 账号后即可按 README 章节执行 `fly launch`/`fly deploy`/`fly secrets set`（需自备 Supabase/高德/DeepSeek key），并在 Supabase 控制台把前端 fly.dev 域名加入回调白名单。仓库设 Public 后即可对外分享。
 
 ## 8. 下一次继续时的操作顺序
 
