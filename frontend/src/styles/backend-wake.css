@@ -119,6 +119,63 @@
   color: #8a86a3;
 }
 
+.doodle-game__controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.doodle-game__btn {
+  flex: 0 0 52px;
+  height: 48px;
+  border: none;
+  border-radius: 12px;
+  background: #ece9ff;
+  color: #7c5cff;
+  font-size: 20px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.doodle-game__btn:active {
+  background: #dcd6ff;
+}
+
+.doodle-game__btn--jump {
+  background: #7c5cff;
+  color: #fff;
+}
+
+.doodle-game__serve-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff9f43;
+}
+
+.doodle-game__speed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px auto 0;
+  font-size: 13px;
+  color: #5b576f;
+  justify-content: center;
+}
+
+.doodle-game__speed input[type='range'] {
+  width: 130px;
+  accent-color: #7c5cff;
+}
+
+.doodle-game__speed span {
+  min-width: 28px;
+  color: #7c5cff;
+  font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .backend-wake__spinner {
     animation: none;

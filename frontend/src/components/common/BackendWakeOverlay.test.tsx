@@ -27,7 +27,7 @@ describe('BackendWakeOverlay', () => {
     fire(BACKEND_WAKING_EVENT);
     expect(screen.getByRole('dialog')).toBeTruthy();
     expect(screen.getByText(/正在唤醒后端服务/)).toBeTruthy();
-    expect(screen.getByText(/往上跳/)).toBeTruthy();
+    expect(screen.getByText(/冰球对打/)).toBeTruthy();
   });
 
   it('收到全部请求结束事件后关闭等待层', () => {

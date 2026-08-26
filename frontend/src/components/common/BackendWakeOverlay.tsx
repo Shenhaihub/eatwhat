@@ -3,7 +3,7 @@ import {
   BACKEND_AWAKE_EVENT,
   BACKEND_WAKING_EVENT,
 } from '../../services/api/client';
-import DoodleJumpGame from './DoodleJumpGame';
+import IceHockeyGame from './IceHockeyGame';
 import '../../styles/backend-wake.css';
 
 /**
@@ -45,7 +45,7 @@ export default function BackendWakeOverlay() {
         <p className="backend-wake__eta">
           预计等待：<strong>30-60 秒</strong> &nbsp;·&nbsp; 数据加载完成会自动关闭本页
         </p>
-        <DoodleJumpGame />
+        <IceHockeyGame />
       </div>
     </div>
   );
