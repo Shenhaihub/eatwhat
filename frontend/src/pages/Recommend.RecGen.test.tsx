@@ -14,6 +14,7 @@ import type {
 } from '../services/api/types';
 import { AuthProvider } from '../context/AuthContext';
 import Recommend from '../pages/Recommend';
+import { displayFoodName } from '../lib/foodNames';
 
 function renderInContext(ui: React.ReactElement) {
   return render(
@@ -226,10 +227,10 @@ describe('/recommend 推荐结果端到端（P2-04 前端接入 recommendationsG
       const card = list.querySelector(`[data-priority="${p}"]`);
       expect(card).toBeTruthy();
       const nameEl = screen.getByTestId(`rec-name-${p}`);
-      expect(nameEl).toHaveTextContent(_items(TOP5_RESPONSE)[p - 1]!.food_code);
+      expect(nameEl).toHaveTextContent(displayFoodName(_items(TOP5_RESPONSE)[p - 1]!));
     }
     // MEM-024 验证：链路 B 首菜不是小碗菜（是 malatang）
-    expect(screen.getByTestId('rec-name-1')).toHaveTextContent('malatang');
+    expect(screen.getByTestId('rec-name-1')).toHaveTextContent(displayFoodName(TOP5_ITEMS[0]!));
   });
 
   it('4) 1→3→5 渐进展示：初始只可见 1 张卡片 → 点击展开到 3 → 再点击展开到 5', async () => {
@@ -379,7 +380,7 @@ describe('/recommend P5 session follow_up 自动跳过 seed 预填（菜系/明�
     await waitFor(() => screen.getByTestId('recommendations-list'), { timeout: 3000 });
     expect(screen.queryByText(/今天想吃哪种菜系风格/)).toBeNull();
     expect(screen.getByTestId('recommendations-list').querySelectorAll('.recommendation-card')).toHaveLength(5);
-    expect(screen.getByTestId('rec-name-1')).toHaveTextContent('malatang');
+    expect(screen.getByTestId('rec-name-1')).toHaveTextContent(displayFoodName(TOP5_ITEMS[0]!));
   });
 
   it('6) 反向：answers 未填菜系时 session 返回菜系 follow_up → 不自动跳，显示给用户自己选（防误跳保护）', async () => {
