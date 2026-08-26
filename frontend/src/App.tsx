@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import BackendWakeOverlay from './components/common/BackendWakeOverlay';
 import AppShell from './components/layout/AppShell';
 import Home from './pages/Home';
 import Community from './pages/Community';
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
+        <BackendWakeOverlay />
       </AuthProvider>
     </ErrorBoundary>
   );

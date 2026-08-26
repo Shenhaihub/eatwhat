@@ -82,42 +82,86 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
+// ---------- 后端冷启动唤醒感知（Render 免费 Web Service 闲置 15 分钟会休眠） ----------
+// 任何请求挂起超过阈值仍未返回 → 触发「后端唤醒中」覆盖层；全部结束 → 关闭。
+const WAKING_THRESHOLD_MS = 2000;
+export const BACKEND_WAKING_EVENT = 'eatwhat:backend-waking';
+export const BACKEND_AWAKE_EVENT = 'eatwhat:backend-awake';
+
+let _slowRequestCount = 0;
+let _wakingOverlayOn = false;
+
+function _raiseBackendWaking(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(BACKEND_WAKING_EVENT));
+}
+function _clearBackendWaking(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(BACKEND_AWAKE_EVENT));
+}
+
 export async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {}, signal } = options;
   const token = _getAccessToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal,
-  });
 
-  if (!response.ok) {
-    let code: string | null = null;
-    let requestId: string | null = null;
-    let message = `请求失败（${response.status}）`;
-    try {
-      const data = (await response.json()) as ApiErrorBody;
-      code = data.error?.code ?? null;
-      message = data.error?.message ?? message;
-      requestId = data.error?.request_id ?? null;
-    } catch {
-      // 非 JSON 响应体，保留默认错误信息
+  let slowTimer: ReturnType<typeof setTimeout> | null = null;
+  let slowTriggered = false;
+  slowTimer = setTimeout(() => {
+    slowTriggered = true;
+    _slowRequestCount += 1;
+    if (!_wakingOverlayOn) {
+      _wakingOverlayOn = true;
+      _raiseBackendWaking();
     }
-    throw new ApiError(response.status, message, code, requestId);
-  }
+  }, WAKING_THRESHOLD_MS);
 
-  // 204 No Content（例如 DELETE /auth/me、DELETE /history/:id）
-  // 按标准是无响应体，直接返回，避免 .json() 抛 "Unexpected end of JSON input"
-  if (response.status === 204) {
-    return undefined as unknown as T;
-  }
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
+    });
 
-  return (await response.json()) as T;
+    if (!response.ok) {
+      let code: string | null = null;
+      let requestId: string | null = null;
+      let message = `请求失败（${response.status}）`;
+      try {
+        const data = (await response.json()) as ApiErrorBody;
+        code = data.error?.code ?? null;
+        message = data.error?.message ?? message;
+        requestId = data.error?.request_id ?? null;
+      } catch {
+        // 非 JSON 响应体，保留默认错误信息
+      }
+      throw new ApiError(response.status, message, code, requestId);
+    }
+
+    // 204 No Content（例如 DELETE /auth/me、DELETE /history/:id）
+    // 按标准是无响应体，直接返回，避免 .json() 抛 "Unexpected end of JSON input"
+    if (response.status === 204) {
+      return undefined as unknown as T;
+    }
+
+    return (await response.json()) as T;
+  } finally {
+    if (slowTimer) clearTimeout(slowTimer);
+    if (slowTriggered) {
+      _slowRequestCount -= 1;
+      if (_slowRequestCount <= 0) {
+        _slowRequestCount = 0;
+        if (_wakingOverlayOn) {
+          _wakingOverlayOn = false;
+          _clearBackendWaking();
+        }
+      }
+    }
+  }
 }
 
 export const api = {
