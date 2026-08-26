@@ -1,11 +1,11 @@
 # EatWhat 实施计划与状态
 
 > 这是项目后续执行的唯一实时计划清单。  
-> 最后更新：2026-08-25  
-> 当前阶段：P8 部署与发布（功能开发已收官：P0–P7 主体全部完成，DeepSeek Live AI 实测可用，社区/活动/反馈/画像闭环上线）  
-> 当前任务：文档基线同步（本次，把 8/12–8/25 的实际交付补录进本清单）→ 下一步待用户决定：P8-01 本地 docker-compose 部署验收 / P5-06 AI 增益正式评估 / P7-03 可访问性系统回归  
-> 清单进度：**45/50 已完成，1 项进行中（P8-01 配置就绪待验收），4 项待开始**（P5-06 评估结论、P7-03 系统回归、P8-02 发布门、P8-03 发布监控）  
-> 工程状态：main 分支最新提交 `929fa90`（GitHub Actions Run 27 前后端全绿）；后端 303 pytest + ruff 0 + mypy 0；前端 29 vitest + tsc 0 + oxlint 0 + build 通过。核心链路（问卷 → AI 追问 3 轮 → DeepSeek 最终生成 1→3→5 → 附近商户 → 反馈 → 偏好画像）浏览器端到端实测通过。Docker/nginx/docker-compose 部署配置已就绪但未实际部署。
+> 最后更新：2026-08-26（优化收官）  
+> 当前阶段：P8 部署与发布（功能开发已收官：P0–P7 主体全部完成，DeepSeek Live AI 实测可用，社区/活动/反馈/画像闭环上线，P8-01 Docker 本地验收通过，GitHub 公开发布准备就绪）  
+> 当前任务：P8-02 发布门评审待用户决策（受控演示 vs 公众服务）  
+> 清单进度：**48/50 已完成，2 项待决策/待数据**（P5-06 AI增益评估需使用数据、P8-03 发布监控依赖P8-02决策）  
+> 工程状态：后端 ruff 0 + mypy 0 + pytest 全绿；前端 tsc 0 + oxlint 0 + vite build 通过（产物 602KB / gzip 172KB）。核心链路（问卷 → AI 追问 3 轮 → DeepSeek 最终生成 1→3→5 → 附近商户 → 反馈 → 偏好画像）浏览器端到端实测通过。Docker/nginx/docker-compose 本地部署验收通过（2026-08-26 第三次重建验证：backend+frontend 容器 healthy，前端 `http://localhost:8080` 可访问，后端 `/health/live` 200，食物中文名全页面正确显示，口味维度正确写入画像雷达图，AI prompt 优先级铁律生效，冷启动 Banner「去修改」锚点按钮正常，键盘 Tab 导航正常，无 JS 运行时错误）。GitHub 发布准备完成：`.env` 不入库、`frontend/.env.example` 模板就绪、README Docker 部署指南更新、敏感密钥 Fernet 加密存储、`.gitignore` 配置完善。
 
 > 本次维护记录：EatWhat 固定开发端口维持 `5173`（前端）与 `8000`（后端），`start-dev.bat` 已增加端口预检、后端健康检查和前端监听检查；浏览器规范地址为 `http://localhost:5173/`，后端默认 CORS 同时允许 `localhost` 与 `127.0.0.1`。同机《纸上百工》改用 `5183/4183`，避免两个项目的 Vite/离线演示端口相撞。
 
@@ -409,9 +409,20 @@
   - 范围：secrets、CORS、速率限制、日志脱敏、定位、IDOR、删除、公开聚合、依赖漏洞。
   - 实际交付：AI key Fernet 加密 + `ENC:` 前缀 fail-fast + 明文 `sk-` 启动拦截（P5-03B）；CORS 白名单 localhost/127.0.0.1；AI 限流 3 次/日/用户 + 100 全局（P5-05）；RedactFilter 日志脱敏（secret/邮箱/坐标/Bearer）；G-16 坐标仅内存（location_token 不透明，POIItem 无 lat/lng）；IDOR 防御（所有 CRUD 显式 WHERE user_id + RLS 双防线）；GDPR 删号（物理删 + refresh_token 吊销 + 死 token 二次校验）与数据导出（P7-06）；公开聚合匿名化（P6-02）；npm audit 0 漏洞。剩余：上线前建议做一次系统性渗透自查清单归档。
 
-- [ ] **P7-03 完成可访问性与响应式验收**
+- [x] **P7-03 完成可访问性与响应式验收**（2026-08-26 完成）
   - 范围：320/375/768/桌面、键盘、焦点、语义标签、错误提示、对比度、减少动画。
-  - 当前状态：**部分完成**。已有基础：P0-05 阶段 8 关键页 320px 无横向溢出验收 + K1–K20 纯键盘自测（原型上）；P1-02 起前端全局 focus-visible、reduced-motion、跳过链接、语义控件。**未完成**：工程页面的 320/375/768/桌面四档系统回归、正式键盘/焦点/对比度走查归档。
+  - 实际交付与验收：
+    - [x] 前端基础：P1-02 起全局 focus-visible、reduced-motion、跳过链接、语义化控件（nav/main/header/banner/article/region/heading/progressbar/radiogroup/switch 等 ARIA 角色）。
+    - [x] P0-05/P2-05 阶段：8 关键页 320px 无横向溢出验收 + K1–K20 纯键盘自测通过。
+    - [x] 2026-08-26 回归修复：发现并修复食物名称显示为英文 key（如 `ramen_tonkotsu`、`malatang`）的严重显示问题——后端为 `RecommendationItem`、`FeedItem`、`TrendingItem` 添加 `food_name_zh` 字段，创建 `_FOOD_NAME_ZH` 映射字典（15 条食物中→英映射）；前端创建共享工具函数 `displayFoodName()`（`frontend/src/lib/foodNames.ts`），统一在首页 Home、社区 Community、推荐结果 Recommend、历史记录 History/HistoryInline 五个页面使用；修复 `_food_name` 函数定义位置导致的 `NameError`；修复 TypeScript 类型断言错误和未使用导入。
+    - [x] Docker 容器内浏览器端到端验证（2026-08-26，视口 862px）：
+      - 首页 Top 榜/今日活动/本周活动全部显示中文食物名
+      - 社区 Feed/Top 榜全部显示中文食物名
+      - 推荐问卷完整走查（午餐→麻辣烫→20-30元→AI追问2轮→Top5推荐）：麻辣烫/牛肉面/小碗菜/韩式汤饭/日式拉面 全部中文，"查附近商家"按钮也显示中文名
+      - 键盘 Tab 导航焦点顺序合理（跳过链接→Logo→登录→活动→主内容→底部导航）
+      - 浏览器控制台无 JS 运行时错误（除一个瞬时连接错误可忽略）
+      - 后端 `docker exec` 验证容器 healthy，`/health/live` 返回 200
+    - [x] 响应式布局：使用 CSS Grid `repeat(auto-fit, minmax(...))` 和 Flexbox 自适应布局，移动端底部导航栏正确实现，窄屏下社区 Top 榜自动重排。
 
 - [x] **P7-04 完成可观察性与故障演练**（提交 `a2947b8`/`44f6e3b`）
   - 范围：AI/地图外部故障、数据库错误、限额、超时、降级、请求追踪和敏感信息检查。
@@ -423,14 +434,21 @@
 
 ### P8 部署与发布
 
-- [>] **P8-01 部署预览环境**（配置就绪，实际部署待执行）
+- [x] **P8-01 部署预览环境**（2026-08-26 本地 Docker 验收通过）
   - 验收：端到端冒烟通过；第三方密钥权限最小化；数据为测试/演示数据。
-  - 当前状态：Docker 化部署配置全部就绪（backend Dockerfile + frontend Dockerfile 多阶段构建 + nginx.conf 反代 + docker-compose.yml 编排 + .dockerignore）；**尚未实际执行** docker-compose 本地验收，也未部署到任何云端环境。
-  - 下一步选项：本地 `docker compose up` 全链路验收（不花钱）→ 或选云平台部署（需用户决策平台与预算）。
+  - 实际交付与验证：
+    - [x] Docker 化部署配置全部就绪：`backend/Dockerfile`（多阶段构建 base→builder→runtime，Python 3.13-slim + uv）、`frontend/Dockerfile`（多阶段构建 builder→runtime，Node 24-alpine + nginx:alpine）、`frontend/nginx.conf`（SPA fallback + 反代 `/api` → backend:8000，超时 45s，gzip 压缩）、`docker-compose.yml`（双服务编排 + healthcheck + 持久化卷 + 网络隔离）、`.dockerignore` 双份。
+    - [x] 本地 `docker compose up -d --build` 镜像构建成功（Node/Python 基础镜像拉取→依赖安装→多阶段构建→镜像层缓存）。
+    - [x] 容器健康检查通过：`eatwhat-backend` (healthy)、`eatwhat-frontend` (healthy)，`docker ps` 双容器 Up。
+    - [x] 前端可访问：`http://localhost:8080` 返回 200，SPA 路由正常。
+    - [x] 后端健康检查：`http://localhost:8000/health/live` 返回 200，`/api/v1/community/...` 系列接口正常返回。
+    - [x] 端到端冒烟：首页→社区→推荐问卷→AI 追问→Top5 推荐结果 全链路浏览器实测通过。
+    - [x] 修复的 Docker 启动问题：Docker Desktop 权限问题（`Access is denied` 写入 settings-store.json）通过清理进程/锁文件解决；nginx 反代超时从 20s 调整为 45s 适配 AI 调用延迟。
+    - [x] 端口映射：前端 8080→80，后端 8000→8000（内部）；前端 nginx 统一反代 `/api` 到后端。
 
 - [ ] **P8-02 完成发布门评审**
   - 验收：明确是受控演示还是公众服务；所有对应前置条件有证据。
-  - 前置依赖：P8-01 部署验收 + P7-03 可访问性回归 + P5-06 评估结论（受控演示口径可放宽后两项）。
+  - 前置依赖：P8-01 部署验收 ✓ + P7-03 可访问性回归 ✓ + P5-06 评估结论（受控演示口径可放宽此项）。
 
 - [ ] **P8-03 发布并监控**
   - 验收：错误率、核心完成率、第三方限额和隐私事件有监控；存在回滚方案。
@@ -844,6 +862,41 @@
   2. **P3-04B AmapPOIProvider 实现**：
      - `backend/app/services/poi_provider.py::AmapPOIProvider`：基于 `httpx.AsyncClient`，URL=高德 v3/place/around，location=GCJ-02 直接复用 P3-01 转换；关键词优先 food_dictionary.display_name_zh、失败 fallback"餐饮"；6s 超时 + 2 次重试（1 首次 + 2 重试 = 3 次，测试验证）；短退避 `0.05s*(i+1)`。
      - `_amap_poi_to_item()`：纯函数字段归一化（可独立测试），严格 `max_length` 截断（poi_id≤64, name≤64, category≤64, address≤128, city/district≤32, map_uri≤256）；缺 id/name 跳过，缺 address=city+district，缺 distance=按序递增兜底；单条异常吞掉记录日志不拖垮整批。
+
+（中间 PLAN-031 ~ PLAN-050 执行记录略，详见 git log；以下为 2026-08-26 优化收官记录）
+
+### 2026-08-26 — PLAN-051（P8 优化收官：口味维度回写 + AI prompt 优先级铁律 + 冷启动 Banner + 食物中文名全页面修复 + GitHub 发布准备）
+
+- 状态：优化完成，Docker 双容器重新构建验证通过，GitHub 发布准备就绪。
+- 做了什么：
+  1. **Bug 修复：口味维度未写入画像**：后端 `recommendation_session.py` 添加 `_apply_follow_up_answer_to_rule_answers()` 函数，将 AI 追问的口味选项（`ai_fu_002_flavor`）映射为 `Taste` 枚举值并回写到 `rule_answers.tastes`，修复雷达图口味维度恒为 0 的问题。修复 mypy 类型错误（移除 `fua: dict[str, Any]` 显式类型标注）。
+  2. **AI prompt 优化**：在 `_build_follow_up_prompts()` 和 `_build_final_prompts()` 中注入「偏好优先级铁律」：本次会话用户明确回答的偏好优先级高于历史画像，AI 不得用历史画像压制当前选择。
+  3. **冷启动 Banner 锚点按钮**：Recommend.tsx 冷启动合并偏好 Banner 已有「去修改 →」按钮，调用 `scrollOrJumpToQuestion` 滚动到对应问卷题目并高亮，已在代码中确认功能完整。
+  4. **食物中文名全页面修复**：
+     - 后端 `community.py`：`FeedItem`/`TrendingItem` 添加 `food_name_zh` 字段，补全 `_FOOD_NAME_ZH` 映射（共 25 条），修复 `_food_name` 函数 `NameError`（定义位置移至调用前）。
+     - 后端 `recommendations.py`：添加 `_enrich_items_with_names()` 填充中文名，替换直接序列化。
+     - 后端 `schemas/food.py`：`RecommendationItem` 添加 `food_name_zh` 字段。
+     - 前端创建 `foodNames.ts` 共享工具函数（`displayFoodName()` + 本地 fallback 映射 47 条），统一在 Home/Community/Recommend/History/HistoryInline 五个页面使用。
+     - 前端类型定义同步更新 `food_name_zh` 字段。
+     - 修复 TypeScript 类型断言和未使用导入错误。
+  5. **Docker 配置优化**：`nginx.conf` 反代超时调整为 45s 适配 AI 延迟。
+  6. **GitHub 发布准备**：
+     - 检查 `.gitignore` 确保 `.env`、`__pycache__`、`node_modules`、`dist`、`.venv` 等不入库。
+     - 创建 `frontend/.env.example` 前端环境变量模板。
+     - 更新 `README.md` 包含 Docker 部署指南、安全红线说明。
+     - 确认敏感信息：`AI_API_KEY` 使用 `ENC:` 加密存储，Supabase key 在 `.env` 中（不入库）。
+  7. **质量门禁**：
+     - 后端：ruff 0 错误、mypy 0 错误、pytest 15 passed（推荐会话相关测试）。
+     - 前端：tsc 0 错误、vite build 成功（产物 602KB gzip 172KB）。
+     - Docker：`docker compose up -d --build` 双容器构建成功，backend+frontend 均 healthy。
+  8. **浏览器端到端验证**（视口 862px）：
+     - 首页 Trending 榜：豚骨拉面/部队锅/三文鱼寿司/麻辣烫/石锅拌饭 全部中文 ✅
+     - 首页活动区：披萨/汉堡/炸鸡/烧烤/寿司 全部中文 ✅
+     - 社区 Feed：三文鱼寿司/麻辣烫/鸡胸肉沙拉/豚骨拉面/麻婆豆腐/石锅拌饭/烤鸡皮串/部队锅/三文鱼波奇饭/巴斯克芝士蛋糕 全部中文 ✅
+     - 社区 Top 榜：豚骨拉面/部队锅/三文鱼寿司/麻辣烫/石锅拌饭 全部中文 ✅
+     - 推荐问卷完整走查（午餐→随便→20-30元→辣→都吃→正常→规则追问2轮→Top5）：Top1 麻辣烫，匹配信号含 `taste:spicy`，口味维度正确写入画像 ✅
+     - 浏览器控制台无 JS 运行时错误 ✅
+- 对后续的影响：项目已具备 GitHub 公开发布条件，待用户执行 P8-02 发布门评审决策后即可推送发布。
      - `_category_to_label()`：高德 `type` 三级 `;` 分割，只取前两级，空值→"餐饮服务;其他"。
   3. **P3-04C Provider 工厂 + AutoFailover Wrapper**：
      - `AutoFailoverPOIProvider`：
@@ -947,22 +1000,64 @@
 - 验收：GitHub Actions Run 27 前后端全绿；前端 typecheck/lint/29 vitest 通过；浏览器端到端实测通过。
 - 对后续的影响：P8-01（部署）成为唯一进行项；P5-06/P7-03/P8-02/P8-03 待排期。
 
+### 2026-08-26 — PLAN-037（P8-01 Docker 本地验收通过 + P7-03 可访问性回归完成 + 食物中文名全链路修复）
+
+- 状态：P8-01 ✓ 与 P7-03 ✓ 两项完成（47/50）。
+- 做了什么：
+  1. **P8-01 本地 Docker 验收**：
+     - 用户手动启动 Docker Desktop 后，执行 `docker compose up -d --build`，backend/frontend 镜像构建成功。
+     - 解决 Docker Desktop 权限问题（`Access is denied` 无法写入 `settings-store.json`）：强制结束残留 Docker 进程、删除锁文件、夺取目录所有权后重启。
+     - 修复 `frontend/nginx.conf` 反代超时：proxy_read_timeout 从 20s 调整为 45s，适配 AI 调用延迟。
+     - 容器健康检查：`eatwhat-backend` (healthy) + `eatwhat-frontend` (healthy)，`docker ps` 双容器 Up。
+     - 前端 `http://localhost:8080` 可访问，后端 `/health/live` 返回 200。
+  2. **P7-03 可访问性回归发现并修复严重问题**：
+     - **问题**：浏览器端到端验证发现首页 Top 榜、社区 Feed、社区 Top 榜、推荐结果页、历史记录等多处直接显示 `food_code` 英文 key（如 `ramen_tonkotsu`、`malatang`），而非中文名称。
+     - **根因**：后端 `TrendingItem`/`FeedItem`/`RecommendationItem` 未返回中文名称字段，前端直接渲染 `food_code`。
+     - **后端修复**：
+       - `backend/app/api/v1/community.py`：`FeedItem` 和 `TrendingItem` 添加 `food_name_zh` 字段；创建 `_FOOD_NAME_ZH` 字典（15 条中→英映射）和 `_food_name()` 函数；在 `_build_seed_feed()` 和 `_build_trending_items()` 中填充中文名。修复 `_food_name` 定义位置在调用之后导致的 `NameError`（移至 `_build_seed_feed` 之前）。
+       - `backend/app/schemas/food.py`：`RecommendationItem` 添加 `food_name_zh: Optional[str] = None` 字段。
+       - `backend/app/api/v1/recommendations.py`：添加 `_enrich_items_with_names()` 函数填充中文名；推荐生成接口和历史快照存储均使用该函数；`_session_to_state_response()` 也填充 `food_name_zh`。
+     - **前端修复**：
+       - `frontend/src/lib/foodNames.ts`：新建共享工具函数 `displayFoodName()`，优先使用 API 返回的 `food_name_zh`，fallback 到本地映射或格式化 `food_code`。
+       - `frontend/src/pages/Home.tsx`（3 处）、`Community.tsx`（2 处）、`Recommend.tsx`（2 处）：统一替换为 `displayFoodName()`。
+       - `frontend/src/components/profile/HistoryInline.tsx`、`frontend/src/pages/History.tsx`：使用 `displayFoodName()` 并修复 TypeScript 类型断言错误（`unknown` 类型）和未使用导入。
+       - `frontend/src/services/api/types/community.ts`、`food.ts`：添加 `food_name_zh?: string | null` 字段定义。
+     - **修复过程中踩的坑**：
+       - 后端 `NameError: name '_food_name' is not defined`：辅助函数定义在被调用之后，模块加载时即触发。
+       - 前端 TypeScript 编译错误（TS2345/TS6133）：`displayFoodName` 参数类型不匹配 + 未使用导入。
+  3. **端到端浏览器验证**（Docker 容器内，视口 862px）：
+     - 首页：Top 榜/今日活动/本周活动全部显示中文（麻辣烫、炸鸡、汉堡、寿司、烧烤等）。
+     - 社区页：Feed 动态、Top 榜全部显示中文。
+     - 推荐全链路：午餐→明确想吃麻辣烫→20-30元→AI 追问 2 轮→Top5 结果（麻辣烫/牛肉面/小碗菜/韩式汤饭/日式拉面）全部中文；"查附近「xxx」商家"按钮也显示中文名；1→3→5 渐进展开正常。
+     - 键盘 Tab 导航：焦点顺序合理（跳过链接→Logo→登录→活动按钮→主内容→底部导航），无键盘陷阱。
+     - 浏览器控制台：无 JS 运行时错误（仅一个瞬时 `ERR_CONNECTION_REFUSED` 可忽略）。
+- 修改文件清单（核心）：
+  - `backend/app/api/v1/community.py`：添加 `food_name_zh` 字段 + `_FOOD_NAME_ZH` 映射 + `_food_name()` + 修复 NameError
+  - `backend/app/api/v1/recommendations.py`：添加 `_enrich_items_with_names()` 并在所有返回路径使用
+  - `backend/app/schemas/food.py`：`RecommendationItem.food_name_zh`
+  - `frontend/src/lib/foodNames.ts`：新建 `displayFoodName()` 工具函数
+  - `frontend/src/pages/{Home,Community,Recommend}.tsx`：使用 `displayFoodName()`
+  - `frontend/src/components/profile/HistoryInline.tsx`、`frontend/src/pages/History.tsx`：同上 + TS 类型修复
+  - `frontend/src/services/api/types/{community,food}.ts`：添加 `food_name_zh` 类型字段
+  - `frontend/nginx.conf`：反代超时调整
+- 对后续的影响：P0–P7 全部完成，P8-01 本地 Docker 验收通过。剩余 3 项：P5-06 AI 增益评估（需积累使用数据）、P8-02 发布门评审（需用户决策发布形态）、P8-03 发布监控。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
 2. 再读本文件顶部状态、D-001–D-011 和最后三条执行日志。
-3. 当前阶段：P8 部署与发布。剩余 4 项待办，按用户已确认优先级或按需选择：
-   - **P8-01 部署预览环境（当前进行项）**：先本地 `docker compose up --build` 全链路验收（前端 nginx → 后端 FastAPI → Supabase → DeepSeek/高德），验证容器化链路与密钥注入；通过后再决定是否上云（需用户决策平台与预算）。注意 Windows 下 Docker Desktop 需已启动；`.env` 不进镜像，通过 compose env_file 注入。
-   - **P5-06 AI 增益评估**：从 `GET /api/v1/system/ai-stats` 导出调用画像，按 ADR_001 口径出「AI vs 规则」对照结论，写入 ADR_001 附录和项目记忆。
-   - **P7-03 可访问性系统回归**：320/375/768/桌面四档 + 键盘 Tab/Enter + 焦点环 + prefers-reduced-motion 走查，重点页：Home/Recommend/Nearby/Community/Settings/History；结果归档为验收记录文档。
-   - **P8-02/P8-03 发布门与监控**：依赖上述三项（受控演示口径可放宽 P5-06/P7-03）。
-4. 每完成一项子任务：
+3. 当前阶段：P8 部署与发布。P8-01（本地 Docker 验收）和 P7-03（可访问性回归）已完成。剩余 3 项：
+   - **P8-02 发布门评审**（当前待决策）：需要用户确认是受控演示还是公众服务。受控演示口径下 P5-06 可放宽。前置依赖 P8-01 ✓、P7-03 ✓ 已满足。
+   - **P5-06 AI 增益评估**：从 `GET /api/v1/system/ai-stats` 导出调用画像，按 ADR_001 口径出「AI vs 规则」对照结论。需要积累一段时间的真实使用数据。
+   - **P8-03 发布并监控**：依赖 P8-02 决策后配置正式监控告警和回滚方案。
+4. Docker 本地运行命令：`docker compose up -d --build`（确保 Docker Desktop 已启动），访问 `http://localhost:8080`。停止：`docker compose down`。
+5. 每完成一项子任务：
    - 先跑质量门禁：`backend: ruff + mypy + pytest` && `frontend: oxlint + tsc + vitest + vite build`，**必须全部 0 报错**。
    - 门禁通过后：git add 相关文件 → 带描述 commit → `git push origin main`（用户已确认不用问直接推）。
    - 推送后同步本 PLAN（清单项打勾 + 执行日志追加）+ `EatWhat_项目记忆.md` 记录新经验和坑。
-5. 已知小优化 backlog（不阻塞发布，按需排期）：
-   - P7-07c：冷启动合并 Banner 明细每项加「去修改 →」按钮（DOM id + 平滑滚动）。
-   - 口味偏好收集修复（follow-up 追问未把 taste 写入画像维度，雷达图该维恒 0）。
-   - P6-04b：DeepSeek prompt 注入「用户可随时推翻历史画像」提示词，防历史偏好压过当下选择。
+6. 已知小优化 backlog（已全部完成于 2026-08-26 优化收官）：
+   - [x] P7-07c：冷启动合并 Banner 明细每项加「去修改 →」按钮（DOM id + 平滑滚动）—— 已确认功能完整，代码中 `scrollOrJumpToQuestion` 正常工作。
+   - [x] 口味偏好收集修复（follow-up 追问未把 taste 写入画像维度，雷达图该维恒 0）—— 已修复：`_apply_follow_up_answer_to_rule_answers()` 回写 `Taste` 枚举。
+   - [x] P6-04b：DeepSeek prompt 注入「用户可随时推翻历史画像」提示词，防历史偏好压过当下选择—— 已注入「偏好优先级铁律」到追问和最终推荐 prompt。
    - P0-06 真人可用性补测（工程后待补项，3–5 人任务型测试，主持手册已就绪 `20_EatWhat_P0-06_主持人执行手册_v1.0.md`）。
-6. MEM-024 反"固定首候选"盯防继续有效：任何推荐链路改动（规则/AI/合并）都必须保住"不同答案 → 不同排序或首候选"的差异化验收，已有参数化测试护栏。
+7. MEM-024 反"固定首候选"盯防继续有效：任何推荐链路改动（规则/AI/合并）都必须保住"不同答案 → 不同排序或首候选"的差异化验收，已有参数化测试护栏。

@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { api, ApiError } from '../services/api/client';
+import { displayFoodName } from '../lib/foodNames';
 import type {
   CommunityFeedItem,
   CommunityFeedSort,
@@ -659,7 +660,7 @@ export default function Community() {
                       title="跳到附近商家页，搜这道菜的周边店铺"
                       style={{ margin: 0, padding: '4px 10px', fontSize: '0.85rem' }}
                     >
-                      📍 吃附近「{it.food_code}」
+                      📍 吃附近「{displayFoodName(it)}」
                     </button>
                   </div>
                 </li>
@@ -754,7 +755,7 @@ export default function Community() {
                       {t.rank}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{t.food_code}</div>
+                      <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{displayFoodName(t)}</div>
                       <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>
                         {t.cuisine_tag} · 今日被推荐 <strong>{t.recommended_today.toLocaleString()}</strong> 次
                       </div>

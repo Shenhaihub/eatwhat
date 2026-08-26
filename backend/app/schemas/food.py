@@ -177,6 +177,7 @@ class RecommendationItem(BaseModel):
 
     priority: int = Field(..., ge=1, le=5)
     food_code: str = Field(..., pattern=r"^[a-z0-9_]{2,40}$")
+    food_name_zh: str | None = Field(default=None, max_length=64, description="食物中文显示名；API层从食物字典填充")
     source_type: SourceType
     generation_mode: GenerationMode
     reason: RecommendationReason

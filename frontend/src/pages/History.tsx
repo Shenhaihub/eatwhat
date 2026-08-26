@@ -3,8 +3,8 @@ import { AlertTriangle, History as HistoryIcon, PlusCircle, RotateCcw, Search, S
 import { Link, useNavigate } from 'react-router';
 import { api } from '../services/api/client';
 import type { HistoryRecord } from '../services/api/types';
-import type { RecommendationItem } from '../services/api/types/food';
 import { describeFinalReason } from '../lib/sourceBadge';
+import { displayFoodName } from '../lib/foodNames';
 import {
   formatWipeSuccessNotice,
   wipeAllPreferencesAndHistory,
@@ -28,17 +28,6 @@ function formatTime(iso: string): string {
   } catch {
     return iso;
   }
-}
-
-function displayFoodName(item: unknown): string {
-  const r = item as Partial<RecommendationItem> & { food_name_zh?: string | null; food_display?: string | null };
-  if (r.food_name_zh) return r.food_name_zh;
-  if (r.food_display) return r.food_display;
-  if (r.food_code) {
-    const pretty = r.food_code.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-    return pretty;
-  }
-  return '未命名菜品';
 }
 
 export default function History() {
@@ -156,7 +145,7 @@ export default function History() {
 
   const tagsText = useCallback((r: HistoryRecord): string => {
     const parts: string[] = [];
-    if (r.food_code) parts.push(r.food_code.replace(/_/g, ' '));
+    if (r.food_code) parts.push(displayFoodName({ food_code: r.food_code }));
     if (r.tags && r.tags.length > 0) {
       parts.push(...r.tags.slice(0, 3));
     }
@@ -290,7 +279,7 @@ export default function History() {
                       {top3.map((it, i) => (
                         <li key={i} className="history-card-item">
                           <span className="history-card-item-priority">{(it as { priority?: number }).priority ?? i + 1}</span>
-                          <span className="history-card-item-name">{displayFoodName(it)}</span>
+                          <span className="history-card-item-name">{displayFoodName(it as { food_code: string; food_name_zh?: string | null })}</span>
                         </li>
                       ))}
                       {snapItems.length > 3 ? (

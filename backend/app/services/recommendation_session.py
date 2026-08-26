@@ -24,7 +24,7 @@ from app.core.config import Settings
 from app.repositories.food_dictionary import FoodDictionaryRepository
 from app.schemas import RecommendationItem
 from app.schemas.ai import FinalRecommendationOutput, FollowUpQuestionOutput
-from app.schemas.enums import GenerationMode, SourceType
+from app.schemas.enums import CuisineGroup, GenerationMode, SourceType, Taste
 from app.services.ai.mock_provider import FOLLOW_UP_TEMPLATES
 from app.services.ai.rate_limiter import AIRateLimiter, build_ai_rate_limiter
 from app.services.ai.service import ChatService
@@ -240,6 +240,11 @@ class RecommendationSessionManager:
                     answered_at=time.monotonic(),
                 )
             )
+            # 3b) 把 AI 追问答案回写到 rule_answers 七维字段（P7-03 bugfix：
+            #     之前口味/菜系维度只存在 follow_up_history 中，偏好快照中 tastes/cuisine_preferences 恒为空）
+            _apply_follow_up_answer_to_rule_answers(
+                session.rule_answers, question_id, selected_option_value,
+            )
             next_round = session.round_index_1based_next + 1
             session.round_index_1based_next = next_round
             session.last_active_at = time.monotonic()
@@ -396,12 +401,14 @@ class RecommendationSessionManager:
                 if cuisine_already_covered
                 else "菜系维度问卷未覆盖，可在追问中补充菜系偏好。\n"
             )
-            + "输出必须严格符合 FollowUpQuestionOutput JSON schema，不要加任何 Markdown 或注释。\n"
+            + "【偏好优先级铁律】本次问卷与 AI 追问中用户给出的明确回答，永远优先于任何历史画像；"
+            "用户每次使用都是一次全新决策，历史画像仅作为弱先验参考，绝不能因为'用户以前喜欢吃 X'就忽略其本次明确表达的需求。\n"
+            "输出必须严格符合 FollowUpQuestionOutput JSON schema，不要加任何 Markdown 或注释。\n"
             "安全边界：question_id 格式必须为 ai_fu_00X_slug（X ∈ {1,2,3}），"
             "options 至少 2 条最多 6 条，value 唯一，title_zh/purpose_zh 中文。"
             + (
-                ("\n\n[用户历史画像参考]：以下为此用户最近几次推荐生成的偏好快照，可作为你出题与判断时的长期先验；"
-                 "若与本次问卷冲突，以本次问卷为准。\n" + pref_blk)
+                ("\n\n[用户历史画像参考]：以下为此用户最近几次推荐生成的偏好快照，仅作为你出题时的弱先验；"
+                 "若与本次问卷或追问冲突，以本次为准，且不要因为历史偏好而跳过用户本次可能感兴趣的维度。\n" + pref_blk)
                 if pref_blk else ""
             )
         )
@@ -435,10 +442,14 @@ class RecommendationSessionManager:
             f"{code_list}\n"
             "强约束 3：5 个 food_code 必须互不相同。\n"
             "强约束 4：reason_zh 必须是中文，每句 4-200 字，说明推荐理由。\n"
+            "强约束 5：【偏好优先级铁律】本次问卷和 AI 追问中用户给出的明确回答，"
+            "永远优先于任何历史画像——用户每次使用都是全新决策，"
+            "若用户本次明确选择了想吃的食物（如麻辣烫、牛肉面），该食物必须排在第 1 位；"
+            "历史偏好仅作为弱先验，绝不能压过本次的明确选择或当下心情（如口味、预算、氛围）。\n"
             "输出 JSON 即可，禁止任何额外文字、Markdown、代码块。"
             + (
-                ("\n\n[用户历史画像参考]：以下为此用户最近几次推荐生成的偏好快照，可作为你推荐的长期先验；"
-                 "若与本次问卷冲突，以本次问卷为准。\n" + pref_blk)
+                ("\n\n[用户历史画像参考]：以下为此用户最近几次推荐生成的偏好快照，仅作为推荐时的弱先验参考；"
+                 "若与本次问卷或追问冲突，以本次为准。\n" + pref_blk)
                 if pref_blk else ""
             )
         )
@@ -628,6 +639,71 @@ def _describe_follow_up_history(history: list[FollowUpAnswer]) -> str:
         return ""
     items = [f"第{i+1}轮:{a.question_id}→{a.selected_option_value}" for i, a in enumerate(history)]
     return " ; ".join(items)
+
+
+# AI 追问选项值 → 七维字段的映射表（纯数据，方便单测覆盖）
+# ai_fu_002_flavor 选项 value → Taste 枚举值列表（支持一个选项映射到多个口味）
+_FLAVOR_OPTION_TO_TASTES: dict[str, list[Taste]] = {
+    "light": [Taste.LIGHT],
+    "savory": [Taste.SALTY],          # "咸香浓郁" → 咸/香
+    "sour_spicy": [Taste.SOUR, Taste.SPICY],  # "酸辣/开胃" → 酸+辣
+    "sweet": [Taste.SWEET],
+}
+
+# ai_fu_001_cuisine 选项 value → CuisineGroup 枚举值列表
+_CUISINE_OPTION_TO_GROUPS: dict[str, list[CuisineGroup]] = {
+    "chinese_north": [CuisineGroup.CHINESE_STAPLE],
+    "chinese_south": [CuisineGroup.CHINESE_STAPLE],
+    "western": [CuisineGroup.WESTERN],
+    "japanese_korean": [CuisineGroup.JAPANESE, CuisineGroup.KOREAN],
+    # "只要辣（川菜/麻辣烫/烧烤）" 本质是口味偏好，映射到 tastes 而非菜系
+    "spicy": [],  # 特殊处理：追加到 tastes
+}
+
+
+def _apply_follow_up_answer_to_rule_answers(
+    rule_answers: Any,
+    question_id: str,
+    selected_option_value: str,
+) -> None:
+    """把一道 AI 追问题的答案回写到 rule_answers 对应字段。
+
+    设计要点：
+    - 幂等：重复调用同一 (question_id, value) 不会产生重复列表项。
+    - 只追加不覆盖：追问题是"补全"语义，不清空问卷已有答案。
+    - 容错：未知 question_id 或 option value 不抛错，仅存入 ai_follow_up_answers 原始记录。
+    - ai_fu_003_vibe（用餐氛围）没有对应七维字段，存入 ai_follow_up_answers 供 AI prompt 参考。
+    """
+    # 始终存入 ai_follow_up_answers 原始字典（便于快照/审计/AI prompt 使用）
+    fua = getattr(rule_answers, "ai_follow_up_answers", None)
+    if isinstance(fua, dict):
+        fua[question_id] = selected_option_value
+
+    if question_id == "ai_fu_002_flavor":
+        tastes = getattr(rule_answers, "tastes", None)
+        if isinstance(tastes, list):
+            mapped = _FLAVOR_OPTION_TO_TASTES.get(selected_option_value, [])
+            existing = {str(t) for t in tastes}
+            for t in mapped:
+                if str(t) not in existing:
+                    tastes.append(t)
+
+    elif question_id == "ai_fu_001_cuisine":
+        if selected_option_value == "spicy":
+            # "只要辣"是口味诉求，追加到 tastes
+            tastes = getattr(rule_answers, "tastes", None)
+            if isinstance(tastes, list) and Taste.SPICY not in {str(t) for t in tastes}:
+                tastes.append(Taste.SPICY)
+        groups = getattr(rule_answers, "cuisine_preferences", None)
+        mapped_groups = _CUISINE_OPTION_TO_GROUPS.get(selected_option_value, [])
+        if isinstance(groups, list) and mapped_groups:
+            existing = {str(g) for g in groups}
+            for g in mapped_groups:
+                if str(g) not in existing:
+                    groups.append(g)
+
+    # ai_fu_003_vibe（氛围）：无七维映射，已写入 ai_follow_up_answers，此处不再处理
+    # AI 动态生成的其他 question_id：仅写入 ai_follow_up_answers，不做启发式映射
 
 
 def _ai_output_to_recommendation_items(

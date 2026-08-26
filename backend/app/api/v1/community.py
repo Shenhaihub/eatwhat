@@ -52,6 +52,7 @@ class FeedItem(BaseModel):
     id: str = Field(..., max_length=32, description="社区动态 ID，供点赞/评论使用")
     author: FeedAuthor
     food_code: str = Field(..., max_length=64)
+    food_name_zh: str = Field(..., max_length=64, description="食物中文显示名")
     cuisine_tag: str = Field(..., max_length=32, description="菜系 tag，例如 '日料' / '川菜'")
     content: str = Field(..., max_length=280, description="≤140 字短评，mock 阶段允许 280")
     likes: int = Field(..., ge=0)
@@ -70,6 +71,7 @@ class TrendingItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
     rank: int = Field(..., ge=1, le=50)
     food_code: str = Field(..., max_length=64)
+    food_name_zh: str = Field(..., max_length=64, description="食物中文显示名")
     cuisine_tag: str = Field(..., max_length=32)
     recommended_today: int = Field(..., ge=0, description="今日被推荐次数（mock 聚合）")
 
@@ -163,6 +165,41 @@ _MOCK_FEED_SEED: list[tuple[str, str, str, int, int, int]] = [
 ]
 
 
+# 食物中文显示名映射（P7-03 可访问性修复：避免前端直接展示 food_code 英文 key）
+_FOOD_NAME_ZH: dict[str, str] = {
+    "ramen_tonkotsu": "豚骨拉面",
+    "sushi_salmon": "三文鱼寿司",
+    "budae_jjigae": "部队锅",
+    "bibimbap": "石锅拌饭",
+    "malatang": "麻辣烫",
+    "mapo_tofu": "麻婆豆腐",
+    "chicken_salad": "鸡胸肉沙拉",
+    "poke_bowl": "三文鱼波奇饭",
+    "cheesecake_basque": "巴斯克芝士蛋糕",
+    "yakitori": "烤鸡皮串",
+    "sushi": "寿司",
+    "korean_stew": "韩式大酱汤",
+    "braised_pork_rice": "卤肉饭",
+    "pasta": "意大利面",
+    "thai_curry": "泰式咖喱",
+    "wonton_noodle": "云吞面",
+    "mapo_tofu_rice": "麻婆豆腐盖饭",
+    "braised_beef_noodle": "红烧牛肉面",
+    "korean_bbq": "韩式烤肉",
+    "buddhist_vegetarian": "罗汉斋",
+    "spicy_hotpot": "麻辣火锅",
+    "burger": "汉堡",
+    "fried_chicken": "炸鸡",
+    "bbq": "烧烤",
+    "pizza": "披萨",
+}
+
+
+def _food_name(food_code: str) -> str:
+    """查询食物中文名，未命中时用 food_code 美化兜底（下划线转空格、首字母大写）。"""
+    return _FOOD_NAME_ZH.get(food_code, food_code.replace("_", " ").title())
+
+
 def _build_seed_feed() -> list[FeedItem]:
     now = _now_utc()
     items: list[FeedItem] = []
@@ -175,6 +212,7 @@ def _build_seed_feed() -> list[FeedItem]:
                 id=f"fd_{idx+1:03d}",
                 author=_MOCK_AUTHORS[idx % len(_MOCK_AUTHORS)],
                 food_code=food_code,
+                food_name_zh=_food_name(food_code),
                 cuisine_tag=cuisine_tag,
                 content=content,
                 likes=likes,
@@ -366,7 +404,7 @@ def _build_trending_items(
     if len(real_data) >= min_count:
         # 纯真实数据
         items = [
-            TrendingItem(rank=i + 1, food_code=fc, cuisine_tag=ct, recommended_today=count)
+            TrendingItem(rank=i + 1, food_code=fc, food_name_zh=_food_name(fc), cuisine_tag=ct, recommended_today=count)
             for i, (fc, ct, count) in enumerate(real_data)
         ]
         return items, "real", False
@@ -378,14 +416,14 @@ def _build_trending_items(
         seed_fill = [(fc, ct, cnt) for fc, ct, cnt in seed_data if fc not in real_codes][:remaining_slots]
         combined = real_data + seed_fill
         items = [
-            TrendingItem(rank=i + 1, food_code=fc, cuisine_tag=ct, recommended_today=count)
+            TrendingItem(rank=i + 1, food_code=fc, food_name_zh=_food_name(fc), cuisine_tag=ct, recommended_today=count)
             for i, (fc, ct, count) in enumerate(combined)
         ]
         return items, "mixed", True
 
     # 纯 Seed 数据
     items = [
-        TrendingItem(rank=i + 1, food_code=fc, cuisine_tag=ct, recommended_today=count)
+        TrendingItem(rank=i + 1, food_code=fc, food_name_zh=_food_name(fc), cuisine_tag=ct, recommended_today=count)
         for i, (fc, ct, count) in enumerate(seed_data)
     ]
     return items, "seed", True

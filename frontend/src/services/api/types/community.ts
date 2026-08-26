@@ -22,6 +22,7 @@ export interface CommunityFeedItem {
   readonly id: string;
   readonly author: CommunityFeedAuthor;
   readonly food_code: string;
+  readonly food_name_zh?: string | null;
   readonly cuisine_tag: string;
   readonly content: string;
   readonly likes: number;
@@ -44,6 +45,7 @@ export interface CommunityFeedListResponse {
 export interface CommunityTrendingItem {
   readonly rank: number;
   readonly food_code: string;
+  readonly food_name_zh?: string | null;
   readonly cuisine_tag: string;
   readonly recommended_today: number;
 }

@@ -35,6 +35,7 @@ import type {
   SessionStateResponseV1,
 } from '../services/api/types';
 import { describeFinalReason } from '../lib/sourceBadge';
+import { displayFoodName } from '../lib/foodNames';
 import { useAuth } from '../context/AuthContext';
 import '../styles/recommendations.css';
 import { track } from '../lib/track';
@@ -2009,7 +2010,7 @@ export default function Recommend() {
                   #{item.priority}
                 </span>
                 <h2 className="recommendation-name" data-testid={`rec-name-${item.priority}`}>
-                  {item.food_code}
+                  {displayFoodName(item)}
                 </h2>
                 {item.budget_fit ? (
                   <span className={`tag tag-budget tag-budget-${item.budget_fit}`}>
@@ -2043,7 +2044,7 @@ export default function Recommend() {
                   onClick={() => nav(`/nearby?food_code=${encodeURIComponent(item.food_code)}`)}
                   data-testid={`rec-nearby-${item.priority}`}
                 >
-                  📍 查附近「{item.food_code}」商家 →
+                  📍 查附近「{displayFoodName(item)}」商家 →
                 </button>
               </div>
             </article>

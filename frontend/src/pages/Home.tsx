@@ -7,6 +7,7 @@ import type {
   CommunityTrendingItem,
   CommunityTrendingResponse,
 } from '../services/api/types';
+import { displayFoodName } from '../lib/foodNames';
 
 type HomeLocationState = { readonly deleted?: boolean };
 
@@ -289,7 +290,7 @@ export default function Home() {
                         marginBottom: 4,
                       }}
                     >
-                      <h3 className="tr-name">{item.food_code}</h3>
+                      <h3 className="tr-name">{displayFoodName(item)}</h3>
                       <span
                         className="cuisine-chip"
                         style={{
@@ -363,7 +364,7 @@ export default function Home() {
               </div>
               <p className="activity-desc">{todayActivity.desc}</p>
               <div className="tr-count">
-                推荐去吃：{todayActivity.food_code} · 直接定位附近商家一步到位
+                推荐去吃：{displayFoodName(todayActivity)} · 直接定位附近商家一步到位
               </div>
             </div>
             <div className="tr-actions">
@@ -403,7 +404,7 @@ export default function Home() {
                   {a.emoji}
                 </span>
                 <span style={{ fontWeight: 600 }}>{WEEKDAY_CN[a.weekday]} · {a.name}</span>
-                <span className="microcopy">{a.food_code}</span>
+                <span className="microcopy">{displayFoodName(a)}</span>
               </button>
             ))}
           </div>

@@ -96,6 +96,7 @@ export interface RecommendationReason {
 export interface RecommendationItem {
   priority: 1 | 2 | 3 | 4 | 5;
   food_code: string;
+  food_name_zh?: string | null;
   source_type: SourceType; // 由服务端派生，前端不写
   generation_mode: GenerationMode; // ai / rule
   reason: RecommendationReason;

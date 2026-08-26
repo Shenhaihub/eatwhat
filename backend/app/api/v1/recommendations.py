@@ -52,6 +52,23 @@ _DICT_VERSION_PATTERN = r"^v[0-9]+\.[0-9]+$"
 router = APIRouter(prefix="/api/v1/recommendations", tags=["recommendations"])
 
 
+# P7-03：给推荐结果填充中文显示名，避免前端直接展示 food_code 英文 key
+def _enrich_items_with_names(
+    items: list[RecommendationItem],
+    dict_version: str | None = None,
+) -> list[dict[str, Any]]:
+    """序列化 RecommendationItem 列表并补充 food_name_zh 字段。"""
+    repo = get_food_dictionary_repository(dict_version or DEFAULT_DICTIONARY_VERSION)
+    result: list[dict[str, Any]] = []
+    for item in items:
+        d = item.model_dump()
+        if not d.get("food_name_zh"):
+            entry = repo.get(item.food_code)
+            d["food_name_zh"] = entry.display_name_zh if entry is not None else item.food_code.replace("_", " ").title()
+        result.append(d)
+    return result
+
+
 # ============== 请求 schema ==============
 
 
@@ -307,7 +324,7 @@ async def recommendations_generate(
         final_reason = "legacy_rule_engine"
 
     # 5) 返回正好 5 条（P7-07：顶层为对象，含 merged_pref_fields 便于前端 banner 展示）
-    items_dumped = [i.model_dump() for i in items]
+    items_dumped = _enrich_items_with_names(items, dict_version)
 
     # 6) 登录态下自动入库历史 + 偏好画像（失败不抛，结果放进 autowrite 字段回传前端）
     autowrite_result = _try_autowrite_history_if_user(
@@ -709,7 +726,7 @@ def _try_autowrite_history_if_user(
             "entry_intent": payload.entry_intent,
             "questionnaire_version": payload.questionnaire_version,
             "dictionary_version": dict_version,
-            "items": [i.model_dump() for i in items],
+            "items": _enrich_items_with_names(items, dict_version),
         }
         hist_resp = write_user_recommendation(
             sb=sb,
@@ -780,7 +797,20 @@ def _try_autowrite_history_if_user(
 def _session_to_state_response(session: RecommendationSession) -> SessionStateResponseV1:
     candidates_dump: list[RecommendationItem] | None = None
     if session.final_items is not None:
-        candidates_dump = list(session.final_items)
+        # P7-03：为 final_items 填充 food_name_zh（副本，避免污染 session 对象）
+        dict_ver = getattr(session, "dictionary_version", None) or DEFAULT_DICTIONARY_VERSION
+        repo = get_food_dictionary_repository(dict_ver)
+        enriched: list[RecommendationItem] = []
+        for it in session.final_items:
+            if it.food_name_zh is None:
+                entry = repo.get(it.food_code)
+                zh_name = entry.display_name_zh if entry is not None else None
+                data = it.model_dump()
+                data["food_name_zh"] = zh_name
+                enriched.append(RecommendationItem(**data))
+            else:
+                enriched.append(it)
+        candidates_dump = enriched
     return SessionStateResponseV1(
         session_id=session.session_id,
         stage=session.stage,
