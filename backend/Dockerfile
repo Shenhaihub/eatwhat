@@ -84,4 +84,5 @@ EXPOSE 8000
 
 # 默认生产启动：1 worker，host=0.0.0.0 才能被容器外访问；想多 worker 请用 --workers N 覆盖 CMD
 # 注意：如果要用 --reload，请跑 dev 模式（不要用这个生产镜像）
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# PORT 兼容：本地 docker compose（无 PORT）→ 8000；Render 等 PaaS 会注入 PORT（如 10000）并转发流量到该端口。
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

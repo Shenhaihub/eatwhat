@@ -165,7 +165,35 @@ Vite dev server 已配置 `/api/*` 代理到 `http://127.0.0.1:8000`，无需跨
 
 > **结论**：先选 **Fly.io（新加坡 `sin` / 东京 `nrt` 节点）** 免备案快速上线，用 fly.dev 子域名或自定义域名做小流量验证；若大陆用户登录太慢再迁国内服务器。
 
-### Fly.io 部署步骤
+### Render 免费部署（零成本首选，用户已选定）
+
+> 无需绑卡（或仅预授权 $1），**总成本 ¥0/月**。后端 Web Service 512MB/0.1CPU 闲置 15 分钟休眠、冷启动 30-60s（适合"先上线验证"）；前端静态站点免费且不数实例小时。
+
+```powershell
+# 0. 把仓库推上 GitHub 后（本项目已是 Public）
+# 1. 登录 render.com → New → Blueprint → 连接本 GitHub 仓库，Render 读取 render.yaml 自动创建两个服务
+#      · eatwhat-backend (Web Service, Docker, Free)
+#      · eatwhat-frontend (Static Site, Free, SPA fallback)
+
+# 2. 首次部署后，进入 eatwhat-backend → Environment 手动填敏感值（不入 Git）：
+#      SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / AI_API_KEY(ENC:...) /
+#      EW_AI_KEY_PASSPHRASE / AMAP_API_KEY / REDIS_URL(可选)
+#    然后 Manual Deploy 重建一次
+
+# 3. 后端公网地址形如 https://eatwhat-backend.onrender.com
+#    前端域名形如 https://eatwhat-frontend.onrender.com（已由 render.yaml 注入 VITE_API_BASE_URL 并配好 CORS）
+
+# 4. Supabase 控制台 → Authentication → URL Configuration
+#    Redirect URLs 加入 https://eatwhat-frontend.onrender.com/**（否则 Magic Link 登录回调失败）
+```
+
+**关键适配点（本项目已内置）**：
+- 后端 `backend/Dockerfile` 已支持 `$PORT`（Render 注入的端口），本地无 `$PORT` 仍用 8000。
+- 前端用 `VITE_API_BASE_URL` 直连后端公网（跨域），`render.yaml` 里已把 `FRONTEND_ORIGINS` + `VITE_API_BASE_URL` 配对成 `*.onrender.com` 域名。
+- **免费层注意**：闲置 15 分钟会休眠，首次访问冷启动 30-60s；免费 Postgres 30 天过期（本项目用 Supabase，不受影响）。
+- 想更稳定（不休眠）可将后端升到 Basic（$6/月）或改用 Fly.io 小实例。
+
+### Fly.io 部署步骤（备选）
 
 ```powershell
 # 0. 安装 flyctl 并登录

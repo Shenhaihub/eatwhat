@@ -1,0 +1,72 @@
+# =============================================================================
+# EatWhat · Render Blueprint（免费部署蓝图）
+# =============================================================================
+# 说明：
+#   1. 在 Render 控制台「New → Blueprint」选择本仓库 GitHub 连接，会自动读取本文件
+#      并创建 backend(Web Service, Free) + frontend(Static Site, Free) 两个服务。
+#   2. 敏感环境变量在下方用 `sync: false` 声明（值**不入 Git**），首次 Blueprint 部署后
+#      需进入各服务 → Environment 选项卡手动粘贴这些值（Supabase/DeepSeek/高德/口令），
+#      然后手动「Deploy」触发一次重建。
+#   3. 免费层：Web Service 512MB/0.1CPU，闲置 15 分钟休眠、冷启动约 30-60s；
+#      静态站点免费且不数实例小时。总成本 ¥0/月（无需绑卡或仅预授权 $1）。
+#   4. 非敏感项（APP_ENV / provider 模式 / CORS）已内联，无需再填。
+# =============================================================================
+
+services:
+  # ========== 后端：FastAPI Web Service（Docker，Free）==========
+  - type: web
+    name: eatwhat-backend
+    runtime: docker
+    plan: free
+    rootDir: ./backend
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health/live
+    autoDeploy: true
+
+    envVars:
+      # 生产必须 live：真实 Provider 优先，失败自动回退 mock（AI/POI 都是 auto）
+      - key: APP_ENV
+        value: production
+      - key: APP_MODE
+        value: live
+      - key: AI_PROVIDER
+        value: auto
+      - key: POI_PROVIDER
+        value: auto
+      - key: AI_TIMEOUT_MS
+        value: "30000"
+      # CORS 白名单：必须包含前端的 Render 域名（跨域直连需要）
+      - key: FRONTEND_ORIGINS
+        value: https://eatwhat-frontend.onrender.com
+      # ---- 敏感项：值在 Render 控制台手动填（不入 Git）----
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: EW_AI_KEY_PASSPHRASE
+        sync: false
+      - key: AMAP_API_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+
+  # ========== 前端：Vite 静态站点（Free，不数实例小时）==========
+  - type: static
+    name: eatwhat-frontend
+    rootDir: ./frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    autoDeploy: true
+
+    envVars:
+      # 构建期注入后端公网地址：前端 /api 直连 Render 后端（跨域），绕过本地 nginx 反代
+      - key: VITE_API_BASE_URL
+        value: https://eatwhat-backend.onrender.com/api/v1
+
+    # SPA fallback：任意路径都回落到 index.html，交给 React Router 接管
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

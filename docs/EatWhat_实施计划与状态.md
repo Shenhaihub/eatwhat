@@ -1062,6 +1062,22 @@
   4. **质量门禁**：仅改配置/文档 + 前端 Dockerfile 加 ARG（默认空），不影响现有构建链路；前端 Dockerfile 改动已核对（ARG 默认空 → 生产 dist 不变）。
 - 对后续的影响：用户创建 Fly 账号后即可按 README 章节执行 `fly launch`/`fly deploy`/`fly secrets set`（需自备 Supabase/高德/DeepSeek key），并在 Supabase 控制台把前端 fly.dev 域名加入回调白名单。仓库设 Public 后即可对外分享。
 
+### 2026-08-26 — PLAN-053（P8-02 调整：选定 Render 免费方案，零成本部署配置就绪）
+
+- 状态：用户放弃 Fly.io 付费路径，改为「先上线验证 + 零成本」，选定 **Render 免费层**。P8-02 仍待执行（需用户注册 Render + 填 key），暂标记 `[ ]`。
+- 前置确认：
+  - DeepSeek 已配置：`AI_PROVIDER=auto` + `AI_API_KEY=ENC:` 密文 + `EW_AI_KEY_PASSPHRASE`(32 字符)。✅
+  - 高德已配置：`POI_PROVIDER=auto` + `AMAP_API_KEY`(32)。✅
+  - Supabase 已配置：URL + service_role key。✅
+  - `app_mode` 未参与 provider gate，`auto` 会真实 Provider 优先、失败降级 mock——生产可正常工作。
+- Render 免费层规则（2026 核实）：512MB/0.1CPU，15 分钟休眠、冷启动 30-60s，**无需绑卡**（或仅预授权 $1），支持 Docker，750 实例小时/月；免费 Postgres 30 天过期（本项目用 Supabase 不受影响）。
+- 发布配置交付：
+  - `backend/Dockerfile`：CMD 改为 `sh -c "uvicorn ... --port ${PORT:-8000}"`，适配 Render 注入的 `PORT`（本地无 PORT 仍 8000）。
+  - `render.yaml`（仓库根）：Blueprint 声明 backend(Web Service, Docker, Free) + frontend(Static Site, Free, SPA rewrite)；敏感 env 用 `sync:false` 不入 Git；`FRONTEND_ORIGINS` 与 `VITE_API_BASE_URL` 配对为 `*.onrender.com`。
+  - `README.md`：「公有云部署」章节新增「Render 免费部署（零成本首选）」，保留 Fly.io 为备选。
+  - 前端无需改码（`VITE_API_BASE_URL` 构建期注入已就绪）。
+- 对后续的影响：用户注册 Render → New Blueprint 连仓库 → 首次部署后在 backend/Environment 填 Supabase/AI/高德/REDIS key → Manual Deploy → Supabase 加前端 onrender.com 回调白名单。成本 ¥0/月。前端静态常驻秒开，仅后端首次冷启动 30-60s。
+
 ## 8. 下一次继续时的操作顺序
 
 1. 先读 `EatWhat_项目记忆.md`。
